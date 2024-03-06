@@ -1,4 +1,5 @@
-import "dotenv/config";
+if (process.env.NODE_ENV !== "production") { require("dotenv").config(); };
+
 import { dirname, importx } from "@discordx/importer";
 import type { Interaction, Message } from "discord.js";
 import { IntentsBitField } from "discord.js";
