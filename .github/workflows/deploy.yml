@@ -23,7 +23,7 @@ jobs:
             CI: false
 
       - name: Log in to GitHub Container Registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u h1ddenscript --password-stdin
+        run: echo "${{ secrets.PAT }}" | docker login ghcr.io -u h1ddenscript --password-stdin
 
       - name: Build Docker image
         run: |
