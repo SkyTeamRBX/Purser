@@ -1,6 +1,6 @@
-import type { ButtonInteraction, CommandInteraction, Interaction, Message, MessageActionRowComponentBuilder, TextChannel } from "discord.js"
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from "discord.js"
-import { ButtonComponent, Discord, Slash } from "discordx"
+import type { ButtonInteraction, ColorResolvable, CommandInteraction, Interaction, Message, MessageActionRowComponentBuilder, TextChannel } from "discord.js"
+import { ActionRowBuilder, ApplicationCommandOptionType, ButtonBuilder, ButtonStyle, Colors, EmbedBuilder } from "discord.js"
+import { ButtonComponent, Discord, Slash, SlashOption } from "discordx"
 
 const timeEachQuestion = 216000_000 // 1 hour
 
@@ -15,9 +15,36 @@ export class AnnounceCommand {
         dmPermission: false,
         defaultMemberPermissions: ["Administrator"],
     })
-    async announce(interaction: CommandInteraction) {
+    async announce(
+        @SlashOption({
+            description: "hex color code for the embed",
+            name: "color",
+            required: false,
+            type: ApplicationCommandOptionType.String
+        })
+        color: string | undefined,
+        interaction: CommandInteraction
+        ) {
+        function isValidHexColor(hex: string): string | null {
+            const hexColorPattern = /^[0-9A-Fa-f]{6}$/
+
+            const colorCode = String(hex).replace('/^#/', '')
+
+            if (hexColorPattern.test(colorCode)) {
+                const finalColorCode = hex.startsWith('#') ? hex : `#${colorCode}`;
+                return finalColorCode;
+            } else {
+                return null;
+            }
+        }
+
         this.embed = new EmbedBuilder()
-        this.embed.setColor("#2b2d31")
+
+        if (color && isValidHexColor(color)) {
+            this.embed.setColor(isValidHexColor(color) as ColorResolvable)
+        } else {
+            this.embed.setColor("#2b2d31")
+        }
 
         await interaction.reply({
             embeds: [
