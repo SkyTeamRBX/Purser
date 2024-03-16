@@ -1,10 +1,11 @@
 import type { ButtonInteraction, ColorResolvable, CommandInteraction, Interaction, Message, MessageActionRowComponentBuilder, TextChannel } from "discord.js"
 import { ActionRowBuilder, ApplicationCommandOptionType, ButtonBuilder, ButtonStyle, Colors, EmbedBuilder } from "discord.js"
-import { ButtonComponent, Discord, Slash, SlashOption } from "discordx"
+import { Bot, ButtonComponent, Discord, Slash, SlashOption } from "discordx"
 
 const timeEachQuestion = 216000_000 // 1 hour
 
 @Discord()
+@Bot()
 export class AnnounceCommand {
     private embed: EmbedBuilder | undefined
     private channel: TextChannel | undefined
@@ -128,35 +129,61 @@ export class AnnounceCommand {
                                 console.log(`Image URL: ${imageUrl}`)
                                 this.embed?.setImage(imageUrl);
                             }
-                            // Tag Type
-                            if (this.embed) {
-                                interaction.followUp({
-                                    content: `Heres a preview of your announcement:`,
-                                    embeds: [
-                                        this.embed
-                                    ],
-                                    components: [
-                                        new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-                                            new ButtonBuilder()
-                                                .setLabel("@everyone")
-                                                .setStyle(ButtonStyle.Secondary)
-                                                .setCustomId("everyone"),
-                                            new ButtonBuilder()
-                                                .setLabel("@here")
-                                                .setStyle(ButtonStyle.Secondary)
-                                                .setCustomId("here"),
-                                            new ButtonBuilder()
-                                                .setLabel("None")
-                                                .setStyle(ButtonStyle.Secondary)
-                                                .setCustomId("none"),
-                                            new ButtonBuilder()
-                                                .setLabel("Cancel")
-                                                .setStyle(ButtonStyle.Danger)
-                                                .setCustomId("cancel"),
-                                        )
-                                    ]
-                                });
-                            }
+                            // Footer
+                            interaction.followUp({
+                                embeds: [
+                                    new EmbedBuilder()
+                                        .setDescription(`What would you like the footer to be?.`)
+                                        .setFooter({ text: `Enter skip to skip this input.` }),
+                                ],
+                            })
+                            interaction.channel?.awaitMessages({
+                                filter: (response: Message<boolean>) => {
+                                    return response.author.id === interaction.user.id;
+                                },
+                                max: 1,
+                                time: timeEachQuestion,
+                                errors: ['time']
+                            }).then(footerResponse => {
+                                const footer = footerResponse.first()?.content;
+                                if (footer !== "skip") {
+                                    this.embed?.setFooter({ text: footerResponse.first()?.content ?? "" })
+                                }
+                                // Tag Type
+                                if (this.embed) {
+                                    interaction.followUp({
+                                        content: `Heres a preview of your announcement:`,
+                                        embeds: [
+                                            this.embed
+                                        ],
+                                        components: [
+                                            new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+                                                new ButtonBuilder()
+                                                    .setLabel("@everyone")
+                                                    .setStyle(ButtonStyle.Secondary)
+                                                    .setCustomId("everyone"),
+                                                new ButtonBuilder()
+                                                    .setLabel("@here")
+                                                    .setStyle(ButtonStyle.Secondary)
+                                                    .setCustomId("here"),
+                                                new ButtonBuilder()
+                                                    .setLabel("None")
+                                                    .setStyle(ButtonStyle.Secondary)
+                                                    .setCustomId("none"),
+                                                new ButtonBuilder()
+                                                    .setLabel("Cancel")
+                                                    .setStyle(ButtonStyle.Danger)
+                                                    .setCustomId("cancel"),
+                                            )
+                                        ]
+                                    });
+                                }
+                            }).catch(() => {
+                                interaction.followUp({ embeds: [
+                                    new EmbedBuilder()
+                                        .setDescription(`Invalid response, cancelled.`),
+                                ]})
+                            })
                         }).catch(() => {
                             interaction.followUp({ embeds: [
                                 new EmbedBuilder()
