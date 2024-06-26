@@ -2,7 +2,7 @@ import type { ButtonInteraction, ColorResolvable, CommandInteraction, MessageAct
 import { ActionRowBuilder, ApplicationCommandOptionType, ButtonBuilder, ButtonStyle, EmbedBuilder } from "discord.js"
 import { Bot, ButtonComponent, Discord, Slash, SlashOption } from "discordx"
 
-import { textChannelQuestion, stringQuestion, imageQuestion } from "../util/messageCollection"
+import { textChannelQuestion, stringQuestion, imageQuestion } from "../util/messageCollection.js"
 
 const timeEachQuestion = 216000_000 // 1 hour
 
