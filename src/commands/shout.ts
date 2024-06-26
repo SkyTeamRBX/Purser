@@ -1,6 +1,8 @@
-import type { ButtonInteraction, ColorResolvable, CommandInteraction, Interaction, Message, MessageActionRowComponentBuilder, TextChannel } from "discord.js"
-import { ActionRowBuilder, ApplicationCommandOptionType, ButtonBuilder, ButtonStyle, Colors, EmbedBuilder } from "discord.js"
+import type { ButtonInteraction, ColorResolvable, CommandInteraction, MessageActionRowComponentBuilder, TextChannel } from "discord.js"
+import { ActionRowBuilder, ApplicationCommandOptionType, ButtonBuilder, ButtonStyle, EmbedBuilder } from "discord.js"
 import { Bot, ButtonComponent, Discord, Slash, SlashOption } from "discordx"
+
+import { textChannelQuestion, stringQuestion, imageQuestion } from "../util/messageCollection"
 
 const timeEachQuestion = 216000_000 // 1 hour
 
@@ -25,195 +27,128 @@ export class AnnounceCommand {
         })
         color: string | undefined,
         interaction: CommandInteraction
-        ) {
-        function isValidHexColor(hex: string): string | null {
-            const hexColorPattern = /^[0-9A-Fa-f]{6}$/
-
-            const colorCode = String(hex).replace('/^#/', '')
-
-            if (hexColorPattern.test(colorCode)) {
-                const finalColorCode = hex.startsWith('#') ? hex : `#${colorCode}`;
-                return finalColorCode;
-            } else {
-                return null;
+    ) {
+        try {
+            function isValidHexColor(hex: string): string | null {
+                const hexColorPattern = /^[0-9A-Fa-f]{6}$/
+    
+                const colorCode = String(hex).replace('/^#/', '')
+    
+                if (hexColorPattern.test(colorCode)) {
+                    const finalColorCode = hex.startsWith('#') ? hex : `#${colorCode}`;
+                    return finalColorCode;
+                } else {
+                    return null;
+                }
             }
-        }
+    
+            this.embed = new EmbedBuilder()
+    
+            if (color && isValidHexColor(color)) {
+                this.embed.setColor(isValidHexColor(color) as ColorResolvable)
+            } else {
+                this.embed.setColor("#2b2d31")
+            }
 
-        this.embed = new EmbedBuilder()
+            this.channel = await textChannelQuestion(
+                interaction, 
+                'What channel would you like to send this message to?', 
+                timeEachQuestion,
+                'You must mention/tag a channel!'
+            )
+    
+            let title = await stringQuestion(
+                interaction,
+                'What is the title of the announcement?',
+                true,
+                timeEachQuestion
+            )
+    
+            let description = await stringQuestion(
+                interaction,
+                'What is the description of the announcement?',
+                false,
+                timeEachQuestion
+            )
 
-        if (color && isValidHexColor(color)) {
-            this.embed.setColor(isValidHexColor(color) as ColorResolvable)
-        } else {
-            this.embed.setColor("#2b2d31")
-        }
+            let image = await imageQuestion(
+                interaction,
+                'What is the image for the announcement?',
+                true,
+                timeEachQuestion
+            )
 
-        await interaction.reply({
-            embeds: [
-                new EmbedBuilder()
-                    .setDescription(`Please mention a channel to send the announcement to.`)
-                    .setFooter({ text: `You must mention/tag a channel!` }),
-            ],
-        })
-        .then(() => {
-            // Channel
-            interaction.channel?.awaitMessages({
-                filter: (response: Message<boolean>) => {
-                    return response.author.id === interaction.user.id
-                },
-                max: 1,
-                time: timeEachQuestion,
-                errors: ['time']
-            }).then(channelResponse => {
-                const channelCheck: TextChannel | undefined = channelResponse.first()?.mentions.channels.first() as TextChannel
-                if (!channelCheck) return interaction.editReply({
-                    embeds: [
-                        new EmbedBuilder()
-                            .setDescription(`Cancelled, no channel was mentioned.`),
-                    ],
-                });
-                this.channel = channelCheck
-                // Title
-                interaction.followUp({
-                    embeds: [
-                        new EmbedBuilder()
-                            .setDescription(`What would you like the title to be?`)
-                            .setFooter({ text: `Enter skip to skip this input.` }),
-                    ],
-                })
-                interaction.channel?.awaitMessages({
-                    filter: (response: Message<boolean>) => {
-                        return response.author.id === interaction.user.id;
-                    },
-                    max: 1,
-                    time: timeEachQuestion,
-                    errors: ['time']
-                }).then(titleResponse => {
-                    const title = titleResponse.first()?.content;
-                    if (title !== "skip") {
-                        this.embed?.setTitle(titleResponse.first()?.content ?? "")
-                    }
-                    // Description
-                    interaction.followUp({
-                        embeds: [
-                            new EmbedBuilder()
-                                .setDescription(`What would you like the description to be?`),
-                        ],
+            let thumbnail = await imageQuestion(
+                interaction,
+                'What is the thumbnail for the announcement?',
+                true,
+                timeEachQuestion
+            )
+    
+            let footer = await stringQuestion(
+                interaction,
+                'What is the footer of the announcement?',
+                true,
+                timeEachQuestion,
+                "Tip: You can type 'me' to use your avatar and username as the footer."
+            )
+
+            if (title) {
+                this.embed.setTitle(title)
+            }
+
+            if (description) {
+                this.embed.setDescription(description)
+            }
+
+            if (image) {
+                this.embed.setImage(image)
+            }
+
+            if (thumbnail) {
+                this.embed.setThumbnail(thumbnail)
+            }
+            
+            if (footer) {
+                if (footer.toLowerCase() === 'me') {
+                    this.embed.setFooter({
+                        text: `${interaction.user.username}`,
+                        iconURL: interaction.user.displayAvatarURL()
                     })
-                    interaction.channel?.awaitMessages({
-                        filter: (response: Message<boolean>) => {
-                            return response.author.id === interaction.user.id;
-                        },
-                        max: 1,
-                        time: timeEachQuestion,
-                        errors: ['time']
-                    }).then(descriptionResponse => {
-                        this.embed?.setDescription(descriptionResponse.first()?.content ?? "")
-                        // Image
-                        interaction.followUp({
-                            embeds: [
-                                new EmbedBuilder()
-                                    .setDescription(`Please send an image to be included in the announcement.`)
-                                    .setFooter({ text: `Enter skip to skip this input.` }),
-                            ],
-                        })
-                        interaction.channel?.awaitMessages({
-                            filter: (response: Message<boolean>) => {
-                                return response.author.id === interaction.user.id;
-                            },
-                            max: 1,
-                            time: timeEachQuestion,
-                            errors: ['time']
-                        }).then(imageResponse => {
-                            const imageUrl = imageResponse.first()?.attachments.first()?.url;
-                            if (imageUrl) {
-                                console.log(`Image URL: ${imageUrl}`)
-                                this.embed?.setImage(imageUrl);
-                            }
-                            // Footer
-                            interaction.followUp({
-                                embeds: [
-                                    new EmbedBuilder()
-                                        .setDescription(`What would you like the footer to be?.`)
-                                        .setFooter({ text: `Enter skip to skip this input.` }),
-                                ],
-                            })
-                            interaction.channel?.awaitMessages({
-                                filter: (response: Message<boolean>) => {
-                                    return response.author.id === interaction.user.id;
-                                },
-                                max: 1,
-                                time: timeEachQuestion,
-                                errors: ['time']
-                            }).then(footerResponse => {
-                                const footer = footerResponse.first()?.content;
-                                if (footer !== "skip") {
-                                    this.embed?.setFooter({ text: footerResponse.first()?.content ?? "" })
-                                }
-                                // Tag Type
-                                if (this.embed) {
-                                    interaction.followUp({
-                                        content: `Heres a preview of your announcement:`,
-                                        embeds: [
-                                            this.embed
-                                        ],
-                                        components: [
-                                            new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-                                                new ButtonBuilder()
-                                                    .setLabel("@everyone")
-                                                    .setStyle(ButtonStyle.Secondary)
-                                                    .setCustomId("everyone"),
-                                                new ButtonBuilder()
-                                                    .setLabel("@here")
-                                                    .setStyle(ButtonStyle.Secondary)
-                                                    .setCustomId("here"),
-                                                new ButtonBuilder()
-                                                    .setLabel("None")
-                                                    .setStyle(ButtonStyle.Secondary)
-                                                    .setCustomId("none"),
-                                                new ButtonBuilder()
-                                                    .setLabel("Cancel")
-                                                    .setStyle(ButtonStyle.Danger)
-                                                    .setCustomId("cancel"),
-                                            )
-                                        ]
-                                    });
-                                }
-                            }).catch(() => {
-                                interaction.followUp({ embeds: [
-                                    new EmbedBuilder()
-                                        .setDescription(`Invalid response, cancelled.`),
-                                ]})
-                            })
-                        }).catch(() => {
-                            interaction.followUp({ embeds: [
-                                new EmbedBuilder()
-                                    .setDescription(`Invalid response, cancelled.`),
-                            ]})
-                        })
-                    }).catch(() => {
-                        interaction.followUp({ embeds: [
-                            new EmbedBuilder()
-                                .setDescription(`Invalid response, cancelled.`),
-                        ]})
-                    })
-                }).catch(() => {
-                    interaction.followUp({ embeds: [
-                        new EmbedBuilder()
-                            .setDescription(`Invalid response, cancelled.`),
-                    ]})
-                })
-            }).catch(() => {
-                interaction.followUp({ embeds: [
-                    new EmbedBuilder()
-                        .setDescription(`Invalid response, cancelled.`),
-                ]})
-            })
-        }).catch(() => {
-            interaction.followUp({ embeds: [
-                new EmbedBuilder()
-                    .setDescription(`Invalid response, cancelled.`),
-            ]})
-        })
+                } else {
+                    this.embed.setFooter({ text: footer })
+                }
+            }
+    
+            interaction.followUp({
+                content: `Heres a preview of your announcement:`,
+                embeds: [
+                    this.embed
+                ],
+                components: [
+                    new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+                        new ButtonBuilder()
+                            .setLabel("@everyone")
+                            .setStyle(ButtonStyle.Secondary)
+                            .setCustomId("everyone"),
+                        new ButtonBuilder()
+                            .setLabel("@here")
+                            .setStyle(ButtonStyle.Secondary)
+                            .setCustomId("here"),
+                        new ButtonBuilder()
+                            .setLabel("None")
+                            .setStyle(ButtonStyle.Secondary)
+                            .setCustomId("none"),
+                        new ButtonBuilder()
+                            .setLabel("Cancel")
+                            .setStyle(ButtonStyle.Danger)
+                            .setCustomId("cancel"),
+                    )
+                ]
+            });
+        } catch (error) {
+            // Unhandled
+        }
     }
 
     @ButtonComponent({ id: "everyone" })
