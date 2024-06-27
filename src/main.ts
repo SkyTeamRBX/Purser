@@ -16,7 +16,7 @@ export const bot = new Client({
     ],
 
     // Locked Guilds
-    botGuilds: [process.env.SERVER_ID || ""],
+    botGuilds: [process.env.HOME_GUILD_ID || ""],
 
     silent: false,
 
