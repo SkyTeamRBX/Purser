@@ -32,7 +32,7 @@ bot.once("ready", async () => {
 });
 
 bot.on("interactionCreate", (interaction: Interaction) => {
-    if (interaction.guildId === process.env.SERVER_ID) {
+    if (interaction.guildId === process.env.HOME_GUILD_ID) {
         bot.executeInteraction(interaction);
     } else {
         console.log("chat who is this guy " + interaction.user.tag + " in " + interaction.guildId)
