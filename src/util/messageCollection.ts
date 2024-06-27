@@ -1,4 +1,4 @@
-import type { Message, TextChannel } from "discord.js";
+import type { Message, TextBasedChannel, TextChannel } from "discord.js";
 import { CommandInteraction, CacheType, EmbedBuilder, ChannelType, InteractionResponse } from "discord.js";
 
 const defaultColour = '#2b2d31'
@@ -107,7 +107,7 @@ export function textChannelQuestion(
       question: string,
       timed?: number,
       footer?: string,
-): Promise<TextChannel> {
+): Promise<TextBasedChannel> {
       return new Promise(async (resolve, reject) => {
             let embed = new EmbedBuilder()
                   .setDescription(question)
@@ -132,7 +132,7 @@ export function textChannelQuestion(
 
             collection?.on('collect', message => {
                   let channel = message.mentions.channels.first() || interaction.guild?.channels.cache.get(message.content)
-                  if (!channel || channel && channel.type != ChannelType.GuildText) {
+                  if (!channel?.isTextBased()) {
                         lastmsg.edit({ embeds: [
                               new EmbedBuilder()
                                     .setDescription('Invalid Channel! Please try again.')

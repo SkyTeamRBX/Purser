@@ -1,4 +1,4 @@
-import type { ButtonInteraction, ColorResolvable, CommandInteraction, MessageActionRowComponentBuilder, TextChannel } from "discord.js"
+import type { ButtonInteraction, ColorResolvable, CommandInteraction, MessageActionRowComponentBuilder, TextBasedChannel, TextChannel } from "discord.js"
 import { ActionRowBuilder, ApplicationCommandOptionType, ButtonBuilder, ButtonStyle, EmbedBuilder } from "discord.js"
 import { Bot, ButtonComponent, Discord, Slash, SlashOption } from "discordx"
 
@@ -10,7 +10,7 @@ const timeEachQuestion = 216000_000 // 1 hour
 @Bot()
 export class AnnounceCommand {
     private embed: EmbedBuilder | undefined
-    private channel: TextChannel | undefined
+    private channel: TextBasedChannel | undefined
 
     @Slash({
         name: "shout",
