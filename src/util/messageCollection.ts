@@ -67,7 +67,7 @@ export function stringQuestion(
 
                         for (let emoji of emojis) {
                               console.log(emoji);
-                              if (interaction.client.emojis.cache.get(emoji)) return console.log("Emoji already exists");
+                              if (interaction.client.emojis.cache.get(emoji)) continue;
 
                               let newEmoji = interaction.client.guilds.cache.get(process.env.TEST_GUILD_ID)?.emojis.cache.find(e => e.name === emoji)
 
