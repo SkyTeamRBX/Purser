@@ -1,185 +1,127 @@
-import type { ButtonInteraction, ColorResolvable, CommandInteraction, MessageActionRowComponentBuilder, TextBasedChannel, TextChannel } from "discord.js"
-import { ActionRowBuilder, ApplicationCommandOptionType, ButtonBuilder, ButtonStyle, EmbedBuilder } from "discord.js"
-import { Bot, ButtonComponent, Discord, Slash, SlashOption } from "discordx"
+import type { ButtonInteraction, ColorResolvable, CommandInteraction, GuildBasedChannel, GuildTextBasedChannel, MessageActionRowComponentBuilder, TextBasedChannel, TextChannel } from 'discord.js'
+import { ActionRowBuilder, ApplicationCommandOptionType, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js'
+import { Bot, ButtonComponent, Discord, Guild, Slash, SlashOption } from 'discordx'
 
-import { textChannelQuestion, stringQuestion, imageQuestion } from "../util/messageCollection.js"
+import { textChannelQuestion, stringQuestion, imageQuestion } from '../util/messageCollection.js'
 
 const timeEachQuestion = 216000_000 // 1 hour
 
 @Discord()
-@Bot()
+@Guild('1102691674104275097', '1122953128703168532')
 export class AnnounceCommand {
-    private embed: EmbedBuilder | undefined
-    private channel: TextBasedChannel | undefined
+	private embed: EmbedBuilder | undefined
+	private channel: GuildTextBasedChannel | undefined
 
-    @Slash({
-        name: "shout",
-        description: "Announce a message to a channel.",
-        dmPermission: false,
-        defaultMemberPermissions: ["Administrator"],
-    })
-    async announce(
-        @SlashOption({
-            description: "hex color code for the embed",
-            name: "color",
-            required: false,
-            type: ApplicationCommandOptionType.String
-        })
-        color: string | undefined,
-        interaction: CommandInteraction
-    ) {
-        try {
-            function isValidHexColor(hex: string): string | null {
-                const hexColorPattern = /^[0-9A-Fa-f]{6}$/
-    
-                const colorCode = String(hex).replace('/^#/', '')
-    
-                if (hexColorPattern.test(colorCode)) {
-                    const finalColorCode = hex.startsWith('#') ? hex : `#${colorCode}`;
-                    return finalColorCode;
-                } else {
-                    return null;
-                }
-            }
-    
-            this.embed = new EmbedBuilder()
-    
-            if (color && isValidHexColor(color)) {
-                this.embed.setColor(isValidHexColor(color) as ColorResolvable)
-            } else {
-                this.embed.setColor("#2b2d31")
-            }
+	@Slash({
+		name: 'shout',
+		description: 'Announce a message to a channel.',
+		dmPermission: false,
+		defaultMemberPermissions: ['Administrator'],
+	})
+	async announce(
+		@SlashOption({
+			description: 'hex color code for the embed',
+			name: 'color',
+			required: false,
+			type: ApplicationCommandOptionType.String,
+		})
+		color: string | undefined,
+		interaction: CommandInteraction,
+	) {
+		try {
+			function isValidHexColor(hex: string): string | null {
+				const hexColorPattern = /^[0-9A-Fa-f]{6}$/
 
-            this.channel = await textChannelQuestion(
-                interaction, 
-                'What channel would you like to send this message to?', 
-                timeEachQuestion,
-                'You must mention/tag a channel!'
-            )
-    
-            let title = await stringQuestion(
-                interaction,
-                'What is the title of the announcement?',
-                true,
-                timeEachQuestion
-            )
-    
-            let description = await stringQuestion(
-                interaction,
-                'What is the description of the announcement?',
-                false,
-                timeEachQuestion
-            )
+				const colorCode = String(hex).replace('/^#/', '')
 
-            let image = await imageQuestion(
-                interaction,
-                'What is the image for the announcement?',
-                true,
-                timeEachQuestion
-            )
+				if (hexColorPattern.test(colorCode)) {
+					const finalColorCode = hex.startsWith('#') ? hex : `#${colorCode}`
+					return finalColorCode
+				} else {
+					return null
+				}
+			}
 
-            let thumbnail = await imageQuestion(
-                interaction,
-                'What is the thumbnail for the announcement?',
-                true,
-                timeEachQuestion
-            )
-    
-            let footer = await stringQuestion(
-                interaction,
-                'What is the footer of the announcement?',
-                true,
-                timeEachQuestion,
-                "Tip: You can type 'me' to use your avatar and username as the footer."
-            )
+			this.embed = new EmbedBuilder()
 
-            if (title) {
-                this.embed.setTitle(title)
-            }
+			if (color && isValidHexColor(color)) {
+				this.embed.setColor(isValidHexColor(color) as ColorResolvable)
+			} else {
+				this.embed.setColor('#2b2d31')
+			}
 
-            if (description) {
-                this.embed.setDescription(description)
-            }
+			this.channel = await textChannelQuestion(interaction, 'What channel would you like to send this message to?', {}, timeEachQuestion, 'You must mention/tag a channel!')
 
-            if (image) {
-                this.embed.setImage(image)
-            }
+			let title = await stringQuestion(interaction, 'What is the title of the announcement?', true, timeEachQuestion)
 
-            if (thumbnail) {
-                this.embed.setThumbnail(thumbnail)
-            }
-            
-            if (footer) {
-                if (footer.toLowerCase() === 'me') {
-                    this.embed.setFooter({
-                        text: `${interaction.user.username}`,
-                        iconURL: interaction.user.displayAvatarURL()
-                    })
-                } else {
-                    this.embed.setFooter({ text: footer })
-                }
-            }
-    
-            interaction.followUp({
-                content: `Heres a preview of your announcement:`,
-                embeds: [
-                    this.embed
-                ],
-                components: [
-                    new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-                        new ButtonBuilder()
-                            .setLabel("@everyone")
-                            .setStyle(ButtonStyle.Secondary)
-                            .setCustomId("everyone"),
-                        new ButtonBuilder()
-                            .setLabel("@here")
-                            .setStyle(ButtonStyle.Secondary)
-                            .setCustomId("here"),
-                        new ButtonBuilder()
-                            .setLabel("None")
-                            .setStyle(ButtonStyle.Secondary)
-                            .setCustomId("none"),
-                        new ButtonBuilder()
-                            .setLabel("Cancel")
-                            .setStyle(ButtonStyle.Danger)
-                            .setCustomId("cancel"),
-                    )
-                ]
-            });
-        } catch (error) {
-            // Unhandled
-        }
-    }
+			let description = await stringQuestion(interaction, 'What is the description of the announcement?', false, timeEachQuestion)
 
-    @ButtonComponent({ id: "everyone" })
-    everyone_handler(interaction: ButtonInteraction): void {
-        interaction.message.edit({ content: `Announced to ${this.channel?.url}!`, components: [] })
-        if (this.embed) {
-            this.channel?.send({ content: `@everyone`, embeds: [this.embed] })
-            return;
-        }
-    }
+			let image = await imageQuestion(interaction, 'What is the image for the announcement?', true, timeEachQuestion)
 
-    @ButtonComponent({ id: "here" })
-    here_handler(interaction: ButtonInteraction): void {
-        interaction.message.edit({ content: `Announced to ${this.channel?.url}!`, components: [] })
-        if (this.embed) {
-            this.channel?.send({ content: `@here`, embeds: [this.embed] })
-            return;
-        }
-    }
+			let footer = await stringQuestion(interaction, 'What is the footer of the announcement?', true, timeEachQuestion)
 
-    @ButtonComponent({ id: "none" })
-    none_handler(interaction: ButtonInteraction): void {
-        interaction.message.edit({ content: `Announced to ${this.channel?.url}!`, components: [] })
-        if (this.embed) {
-            this.channel?.send({ embeds: [this.embed] })
-            return;
-        }
-    }
+			if (title) {
+				this.embed.setTitle(title)
+			}
 
-    @ButtonComponent({ id: "cancel" })
-    handler(interaction: ButtonInteraction): void {
-        interaction.message.edit({ content: `Cancelled`, components: [], embeds: []})
-    }
+			if (description) {
+				this.embed.setDescription(description)
+			}
+
+			if (image) {
+				this.embed.setImage(image)
+			}
+
+			if (footer) {
+				if (footer.toLowerCase() === 'me') {
+					this.embed.setFooter({
+						text: `${interaction.user.username}`,
+						iconURL: interaction.user.displayAvatarURL(),
+					})
+				} else {
+					this.embed.setFooter({ text: footer })
+				}
+			}
+
+			interaction.followUp({
+				content: `Heres a preview of your announcement:`,
+				embeds: [this.embed],
+				components: [new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new ButtonBuilder().setLabel('@everyone').setStyle(ButtonStyle.Secondary).setCustomId('everyone'), new ButtonBuilder().setLabel('@here').setStyle(ButtonStyle.Secondary).setCustomId('here'), new ButtonBuilder().setLabel('None').setStyle(ButtonStyle.Secondary).setCustomId('none'), new ButtonBuilder().setLabel('Cancel').setStyle(ButtonStyle.Danger).setCustomId('cancel'))],
+			})
+		} catch (error) {
+			// Unhandled
+		}
+	}
+
+	@ButtonComponent({ id: 'everyone' })
+	async everyone_handler(interaction: ButtonInteraction): Promise<void> {
+		interaction.message.edit({ content: `Announced to ${this.channel?.url}!`, components: [] })
+		if (this.embed) {
+			await this.channel?.send({ content: `@everyone`, embeds: [this.embed] })
+			return
+		}
+	}
+
+	@ButtonComponent({ id: 'here' })
+	async here_handler(interaction: ButtonInteraction): Promise<void> {
+		interaction.message.edit({ content: `Announced to ${this.channel?.url}!`, components: [] })
+		if (this.embed) {
+			await this.channel?.send({ content: `@here`, embeds: [this.embed] })
+			return
+		}
+	}
+
+	@ButtonComponent({ id: 'none' })
+	async none_handler(interaction: ButtonInteraction): Promise<void> {
+		interaction.message.edit({ content: `Announced to ${this.channel?.url}!`, components: [] })
+		if (this.embed) {
+			await this.channel?.send({ embeds: [this.embed] })
+			return
+		}
+	}
+
+	@ButtonComponent({ id: 'cancel' })
+	async handler(interaction: ButtonInteraction): Promise<void> {
+		await interaction.message.edit({ content: `Cancelled`, components: [], embeds: [] })
+	}
 }
