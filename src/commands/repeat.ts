@@ -22,7 +22,7 @@ export class RepeatCommand {
 	): Promise<void> {
 		const channel = interaction.options.get('channel')?.channel as TextChannel
 
-		if (channel.isTextBased()) {
+		if (channel.isTextBased() && interaction.channel) {
 			if (channel.guild.members.me?.permissionsIn(channel).has(PermissionFlagsBits.SendMessages)) {
 				interaction.reply({
 					embeds: [new EmbedBuilder().setDescription(`What would you like the message to be?`)],
@@ -30,7 +30,7 @@ export class RepeatCommand {
 				})
 
 				interaction.channel
-					?.awaitMessages({
+					.awaitMessages({
 						filter: (response: Message<boolean>) => {
 							return response.author.id === interaction.user.id
 						},
