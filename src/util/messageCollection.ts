@@ -804,7 +804,7 @@ export async function attachmentQuestion(FunctionArgs: FunctionArgs): Promise<Fu
 
 					if (attachment) {
 						const logChannel = (await (await interaction.client.guilds.fetch(process.env.TEST_GUILD_ID)).channels.fetch()).filter(channel => channel?.type === ChannelType.GuildText).first()
-						if (logChannel) {
+						if (logChannel && logChannel.type === ChannelType.GuildText) {
 							attachment = (await logChannel.send({files: [attachment]})).attachments.first() as Attachment
 						}
 					}
