@@ -1,389 +1,836 @@
-import type { AwaitMessageCollectorOptionsParams, GuildBasedChannel, GuildTextBasedChannel, InteractionReplyOptions, Message, MessageActionRowComponentBuilder, MessageComponentType, MessagePayload, Role, TextBasedChannel, TextChannel, User } from 'discord.js'
-import { CommandInteraction, CacheType, EmbedBuilder, ChannelType, InteractionResponse, ButtonInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } from 'discord.js'
-
-import basicEmbed from './basicEmbed.js'
+import { channel } from 'diagnostics_channel'
+import { EmbedBuilder, Message, InteractionReplyOptions, ActionRowBuilder, ButtonBuilder, ButtonStyle, BaseInteraction, RepliableInteraction, GuildTextBasedChannel, TextChannel, Role, GuildMember, User, ButtonInteraction, Attachment, ChannelType} from 'discord.js'
+import { basicEmbed } from './basicEmbed.js'
 
 const defaultColour = '#2b2d31'
+const defaultTimeout = 120_000 // 2 minutes
 
-function extractUniqueDiscordEmojiIds(text: string): string[] {
-	// Regular expression to match and capture the numeric ID part of Discord emojis
-	const emojiIdRegex = /<:\w+:(\d+)>/g
-
-	// Set to hold the unique extracted IDs
-	const idsSet = new Set<string>()
-
-	// Match the text against the regular expression
-	let match: RegExpExecArray | null
-	while ((match = emojiIdRegex.exec(text)) !== null) {
-		// The captured group (numeric ID) is at index 1 in the match array
-		idsSet.add(match[1])
-	}
-
-	// Convert the Set to an array and return it
-	return Array.from(idsSet)
+type FunctionArgs = {
+	interaction: RepliableInteraction
+	question: string
+	skippable?: boolean
+	extra_components?: ButtonBuilder[]
+	extra_embeds?: EmbedBuilder[]
+	timeout?: number
 }
 
-export function stringQuestion(interaction: CommandInteraction<CacheType> | ButtonInteraction<CacheType>, question: string, skipable: boolean, timed?: number, footer?: string): Promise<string | null> {
-	return new Promise(async (resolve, reject) => {
-		let embed = new EmbedBuilder().setDescription(question).setColor(defaultColour)
+type FunctionResponse<T> = {
+	[x: string]: any
+	response: T
+	interaction: BaseInteraction
+	originalMessage: Message
+}
 
-		if (skipable) {
-			embed.setFooter({ text: 'Enter skip to skip this input.' })
+function createEmbed(question: string): EmbedBuilder {
+	return new EmbedBuilder().setDescription(question).setColor(defaultColour)
+}
+
+function createSkipButton(): ButtonBuilder {
+	return new ButtonBuilder().setCustomId('skip').setLabel('Skip').setStyle(ButtonStyle.Secondary).setEmoji('<:chevrongrey:1265399459886534730>')
+}
+
+function createEmptyButton(contents: string, style?: ButtonStyle): ButtonBuilder {
+	return new ButtonBuilder().setCustomId('nil').setLabel(contents).setStyle(style || ButtonStyle.Secondary).setDisabled(true)
+}
+
+function createCollectors(Message: Message, filter: (Message: Message) => boolean, OldReplyOptions: InteractionReplyOptions, FunctionArgs: FunctionArgs): Promise<Message<boolean> | null> {
+	return new Promise((resolve, reject) => {
+		try {
+			let a
+			Message.channel
+				.awaitMessages({
+					filter,
+					max: 1,
+					time: FunctionArgs.timeout || defaultTimeout,
+					errors: ['time'],
+				})
+				.then((collected) => {
+					const response = collected.first()
+
+					if (!response) {
+						resolve(null)
+					} else {
+						resolve(response)
+					}
+				})
+				.catch(() => {
+					reject('No response was given.')
+				})
+
+			if (FunctionArgs.skippable) {
+				a = Message.awaitMessageComponent({
+					filter: (i) => i.user.id === FunctionArgs.interaction.user.id,
+					time: FunctionArgs.timeout || defaultTimeout,
+				})
+					.then((i) => {
+						i.update({ components: [
+							new ActionRowBuilder<ButtonBuilder>()
+								.addComponents(createEmptyButton('You have skipped this question.'))
+						] })
+						if (i.customId === 'skip') {
+							resolve(null)
+						}
+					})
+					.catch(() => {
+						// does nothing
+					})
+			}
+		} catch (error) {
+			Message.edit({ content: 'This process was not complete.' })
+			reject(error)
+		}
+	})
+}
+/**
+ * Collect an answer as a string.
+ *
+ * @argument interaction - Inital Interaction.
+ * @argument question - The question to ask.
+ * @argument skippable - Whether the question is skippable.
+ * @argument extra_embed - An extra embed to add.
+ * @argument timeout - The time in milliseconds, for the timeout of the question.
+ * @returns The response from the user, including the original message and interaction.
+ */
+export async function stringQuestion(FunctionArgs: FunctionArgs): Promise<FunctionResponse<string | null>> {
+	return new Promise((resolve, reject) => {
+		const originalEmbed: EmbedBuilder = createEmbed(FunctionArgs.question)
+		const interaction: RepliableInteraction = FunctionArgs.interaction
+
+		let embeds: EmbedBuilder[] = [originalEmbed]
+		let actionRow = new ActionRowBuilder<ButtonBuilder>()
+		let components: ButtonBuilder[] = []
+
+		const replyOptions: InteractionReplyOptions = {}
+
+		if (FunctionArgs.extra_embeds) {
+			embeds = [...FunctionArgs.extra_embeds, ...embeds]
 		}
 
-		if (footer) {
-			embed.setFooter({ text: footer })
+		if (FunctionArgs.extra_components) {
+			components = [...FunctionArgs.extra_components]
 		}
 
-		let lastmsg: Message | InteractionResponse
-
-		if (interaction.replied) {
-			lastmsg = await interaction.followUp({ embeds: [embed] })
-		} else {
-			lastmsg = await interaction.reply({ embeds: [embed] })
+		if (FunctionArgs.skippable) {
+			components.push(createSkipButton())
 		}
 
-		const collection = interaction.channel?.createMessageCollector({
-			filter: (response: Message<boolean>) => {
-				return response.author.id == interaction.user.id
-			},
-			time: timed || 300_000,
+		if (components.length > 0) {
+			actionRow.addComponents(...components)
+			replyOptions.components = [actionRow]
+		}
+
+		replyOptions.embeds = embeds
+
+		const message = interaction.replied ? interaction.followUp(replyOptions) : interaction.reply(replyOptions)
+
+		message.then(async (i) => {
+			const msg: Message<boolean> = await i.fetch()
+
+			createCollectors(msg, (msg) => msg.author.id === FunctionArgs.interaction.user.id, replyOptions, FunctionArgs)
+				.then((response) => {
+					resolve({ response: response ? response.content : null, interaction, originalMessage: msg })
+
+					if (response !== null) {
+						response.delete()
+
+						if (response.content.length < 80 - 19) {
+							msg.edit({
+								embeds: embeds,
+								components: [new ActionRowBuilder<ButtonBuilder>().addComponents(createEmptyButton(`You have answered: ${response.content}`))],
+							})
+						} else {
+							msg.edit({
+								embeds: embeds,
+								components: [new ActionRowBuilder<ButtonBuilder>().addComponents(createEmptyButton(`You have answered: ${response.content.substring(0, (80 - 19)-3)}...`))],
+							})
+						}
+					}
+				})
+				.catch((error) => {
+					reject(error)
+					msg.edit({
+						embeds: embeds,
+						components: [],
+					})
+				})
 		})
+	})
+}
 
-		collection?.on('collect', async (message) => {
-			if (message.content.toLowerCase() == 'skip' && skipable) {
-				resolve(null)
-			} else {
-				const emojis = extractUniqueDiscordEmojiIds(message.content)
-				var filteredMessage = message.content
+/**
+ * Collect an answer as a number.
+ *
+ * @argument interaction - Inital Interaction.
+ * @argument question - The question to ask.
+ * @argument skippable - Whether the question is skippable.
+ * @argument extra_embed - An extra embed to add.
+ * @argument timeout - The time in milliseconds, for the timeout of the question.
+ * @returns The response from the user, including the original message and interaction.
+ */
+export async function numberQuestion(FunctionArgs: FunctionArgs): Promise<FunctionResponse<number | null>> {
+	return new Promise((resolve, reject) => {
+		const originalEmbed: EmbedBuilder = createEmbed(FunctionArgs.question)
+		const interaction: RepliableInteraction = FunctionArgs.interaction
 
-				for (let emoji of emojis) {
-					console.log(emoji)
-					if (interaction.client.emojis.cache.get(emoji)) continue
+		let embeds: EmbedBuilder[] = [originalEmbed]
+		let actionRow = new ActionRowBuilder<ButtonBuilder>()
+		let components: ButtonBuilder[] = []
 
-					let newEmoji = interaction.client.guilds.cache.get(process.env.TEST_GUILD_ID)?.emojis.cache.find((e) => e.name === emoji)
+		const replyOptions: InteractionReplyOptions = {}
 
-					if (!newEmoji) {
-						const url = `https://cdn.discordapp.com/emojis/${emoji}.png`
-						newEmoji = await interaction.client.guilds.cache.get(process.env.TEST_GUILD_ID)?.emojis.create({ name: emoji, attachment: url })
+		if (FunctionArgs.extra_embeds) {
+			embeds = [...FunctionArgs.extra_embeds, ...embeds]
+		}
+
+		if (FunctionArgs.extra_components) {
+			components = [...FunctionArgs.extra_components]
+		}
+
+		if (FunctionArgs.skippable) {
+			components.push(createSkipButton())
+		}
+
+		if (components.length > 0) {
+			actionRow.addComponents(...components)
+			replyOptions.components = [actionRow]
+		}
+
+		replyOptions.embeds = embeds
+
+		const message = interaction.replied ? interaction.followUp(replyOptions) : interaction.reply(replyOptions)
+
+		message.then(async (i) => {
+			const msg: Message<boolean> = await i.fetch()
+
+			createCollectors(msg, (msg) => msg.author.id === FunctionArgs.interaction.user.id, replyOptions, FunctionArgs)
+				.then((response) => {
+					if (response && Number.isNaN(Number(response.content))) {
+						msg.edit({
+							embeds: embeds,
+							components: [new ActionRowBuilder<ButtonBuilder>().addComponents(createEmptyButton(`That is not a number.`))],
+						})
+
+						reject('Not a number.')
+
+						return;
 					}
 
-					const pattern = new RegExp(`<:\\w+:${emoji}>`, 'g')
+					resolve({ response: response ? Number(response.content) : null, interaction, originalMessage: msg })
 
-					// Construct the new emoji pattern
-					const replacement: string = `<:${emoji}:${newEmoji?.id}>`
 
-					filteredMessage = filteredMessage.replace(pattern, replacement)
+					if (response !== null) {
+						response.delete()
+
+						if (response.content.length < 80 - 19) {
+							msg.edit({
+								embeds: embeds,
+								components: [new ActionRowBuilder<ButtonBuilder>().addComponents(createEmptyButton(`You have answered: ${response.content}`))],
+							})
+						} else {
+							msg.edit({
+								embeds: embeds,
+								components: [new ActionRowBuilder<ButtonBuilder>().addComponents(createEmptyButton(`You have answered: ${response.content.substring(0, (80 - 19)-3)}...`))],
+							})
+						}
+					}
+				})
+				.catch((error) => {
+					reject(error)
+					msg.edit({
+						embeds: embeds,
+						components: [],
+					})
+				})
+		})
+	})
+}
+
+/**
+ * Collect an answer as a GuildTextBasedChannel.
+ *
+ * @argument interaction - Inital Interaction.
+ * @argument question - The question to ask.
+ * @argument skippable - Whether the question is skippable.
+ * @argument extra_embed - An extra embed to add.
+ * @argument timeout - The time in milliseconds, for the timeout of the question.
+ * @returns The response from the user, including the original message and interaction.
+ */
+export async function textChannelQuestion(FunctionArgs: FunctionArgs): Promise<FunctionResponse<GuildTextBasedChannel | null>> {
+	return new Promise((resolve, reject) => {
+		const originalEmbed: EmbedBuilder = createEmbed(FunctionArgs.question)
+		const interaction: RepliableInteraction = FunctionArgs.interaction
+
+		let embeds: EmbedBuilder[] = [originalEmbed]
+		let actionRow = new ActionRowBuilder<ButtonBuilder>()
+		let components: ButtonBuilder[] = []
+
+		const replyOptions: InteractionReplyOptions = {}
+
+		if (FunctionArgs.extra_embeds) {
+			embeds = [...FunctionArgs.extra_embeds, ...embeds]
+		}
+
+		if (FunctionArgs.extra_components) {
+			components = [...FunctionArgs.extra_components]
+		}
+
+		if (FunctionArgs.skippable) {
+			components.push(createSkipButton())
+		}
+
+		if (components.length > 0) {
+			actionRow.addComponents(...components)
+			replyOptions.components = [actionRow]
+		}
+
+		replyOptions.embeds = embeds
+
+		const message = interaction.replied ? interaction.followUp(replyOptions) : interaction.reply(replyOptions)
+
+		message.then(async (i) => {
+			const msg: Message<boolean> = await i.fetch()
+
+			createCollectors(msg, (msg) => msg.author.id === FunctionArgs.interaction.user.id && msg.mentions.channels.first() !== undefined, replyOptions, FunctionArgs)
+				.then(async (response) => {
+					const channel: TextChannel | null = response ? await response?.mentions.channels.first() as TextChannel : null
+
+					resolve({ response: channel, interaction, originalMessage: msg })
+
+					if (response !== null && channel !== null) {
+						response.delete()
+
+						if (channel.name.length < 80 - 19) {
+							msg.edit({
+								embeds: embeds,
+								components: [new ActionRowBuilder<ButtonBuilder>().addComponents(createEmptyButton(`You have answered: #${channel.name}`))],
+							})
+						}
+					}
+				})
+				.catch((error) => {
+					reject(error)
+					msg.edit({
+						embeds: embeds,
+						components: [],
+					})
+				})
+		})
+	})
+}
+
+/**
+ * Collect an answer as a Role.
+ *
+ * @argument interaction - Inital Interaction.
+ * @argument question - The question to ask.
+ * @argument skippable - Whether the question is skippable.
+ * @argument extra_embed - An extra embed to add.
+ * @argument timeout - The time in milliseconds, for the timeout of the question.
+ * @returns The response from the user, including the original message and interaction.
+ */
+export async function roleQuestion(FunctionArgs: FunctionArgs): Promise<FunctionResponse<Role | null>> {
+	return new Promise((resolve, reject) => {
+		const originalEmbed: EmbedBuilder = createEmbed(FunctionArgs.question)
+		const interaction: RepliableInteraction = FunctionArgs.interaction
+
+		let embeds: EmbedBuilder[] = [originalEmbed]
+		let actionRow = new ActionRowBuilder<ButtonBuilder>()
+		let components: ButtonBuilder[] = []
+
+		const replyOptions: InteractionReplyOptions = {}
+
+		if (FunctionArgs.extra_embeds) {
+			embeds = [...FunctionArgs.extra_embeds, ...embeds]
+		}
+
+		if (FunctionArgs.extra_components) {
+			components = [...FunctionArgs.extra_components]
+		}
+
+		if (FunctionArgs.skippable) {
+			components.push(createSkipButton())
+		}
+
+		if (components.length > 0) {
+			actionRow.addComponents(...components)
+			replyOptions.components = [actionRow]
+		} 
+
+		replyOptions.embeds = embeds
+
+		const message = interaction.replied ? interaction.followUp(replyOptions) : interaction.reply(replyOptions)
+
+		message.then(async (i) => {
+			const msg: Message<boolean> = await i.fetch()
+
+			createCollectors(msg, (msg) => msg.author.id === FunctionArgs.interaction.user.id && msg.mentions.roles.first() !== undefined, replyOptions, FunctionArgs)
+				.then(async (response) => {
+					if (!response) return reject('message lost?')
+					const role: Role = await response.mentions.roles.first() as Role
+
+					resolve({ response: role, interaction, originalMessage: msg })
+
+					if (response !== null) {
+						response.delete()
+
+						if (role.name.length < 80 - 19) {
+							msg.edit({
+								embeds: embeds,
+								components: [new ActionRowBuilder<ButtonBuilder>().addComponents(createEmptyButton(`You have answered: @${role.name}`))],
+							})
+						}
+					}
+				})
+				.catch((error) => {
+					reject(error)
+					msg.edit({
+						embeds: embeds,
+						components: [],
+					})
+				})
+		})
+	})
+}
+
+/**
+ * Collect an answer as a User.
+ *
+ * @argument interaction - Inital Interaction.
+ * @argument question - The question to ask.
+ * @argument skippable - Whether the question is skippable.
+ * @argument extra_embed - An extra embed to add.
+ * @argument timeout - The time in milliseconds, for the timeout of the question.
+ * @returns The response from the user, including the original message and interaction.
+ */
+export async function usersQuestion(FunctionArgs: FunctionArgs): Promise<FunctionResponse<User[] | null>> {
+	return new Promise((resolve, reject) => {
+		const originalEmbed: EmbedBuilder = createEmbed(FunctionArgs.question)
+		const interaction: RepliableInteraction = FunctionArgs.interaction
+
+		let embeds: EmbedBuilder[] = [originalEmbed]
+		let actionRow = new ActionRowBuilder<ButtonBuilder>()
+		let components: ButtonBuilder[] = []
+
+		const replyOptions: InteractionReplyOptions = {}
+
+		if (FunctionArgs.extra_embeds) {
+			embeds = [...FunctionArgs.extra_embeds, ...embeds]
+		}
+
+		if (FunctionArgs.extra_components) {
+			components = [...FunctionArgs.extra_components]
+		}
+
+		if (FunctionArgs.skippable) {
+			components.push(createSkipButton())
+		}
+
+		if (components.length > 0) {
+			actionRow.addComponents(...components)
+			replyOptions.components = [actionRow]
+		} 
+
+		replyOptions.embeds = embeds
+
+		const message = interaction.replied ? interaction.followUp(replyOptions) : interaction.reply(replyOptions)
+
+		message.then(async (i) => {
+			const msg: Message<boolean> = await i.fetch()
+
+			createCollectors(msg, (msg) => msg.author.id === FunctionArgs.interaction.user.id && msg.mentions.users.first() !== undefined, replyOptions, FunctionArgs)
+				.then(async (response) => {
+					if (!response) return reject('message lost?')
+					const users: User[] = await response.mentions.users.toJSON() as User[]
+
+					resolve({ response: users, interaction, originalMessage: msg })
+
+					if (response !== null) {
+						response.delete()
+
+						if (users.length === 1) {
+							msg.edit({
+								embeds: embeds,
+								components: [new ActionRowBuilder<ButtonBuilder>().addComponents(createEmptyButton(`You have answered: @${users[0].username}`))],
+							})
+						} else {
+							msg.edit({
+								embeds: embeds,
+								components: [new ActionRowBuilder<ButtonBuilder>().addComponents(createEmptyButton(`You have answered with ${users.length} users`))],
+							})
+						}
+					}
+				})
+				.catch((error) => {
+					reject({
+						error: error,
+						interaction,
+						originalMessage: msg
+					})
+					msg.edit({
+						embeds: embeds,
+						components: [],
+					})
+				})
+		})
+	})
+}
+
+
+/**
+ * Collect an answer as a GuildMember.
+ *
+ * @argument interaction - Inital Interaction.
+ * @argument question - The question to ask.
+ * @argument skippable - Whether the question is skippable.
+ * @argument extra_embed - An extra embed to add.
+ * @argument timeout - The time in milliseconds, for the timeout of the question.
+ * @returns The response from the user, including the original message and interaction.
+ */
+export async function guildMemberQuestion(FunctionArgs: FunctionArgs): Promise<FunctionResponse<GuildMember[] | null>> {
+	return new Promise((resolve, reject) => {
+		const originalEmbed: EmbedBuilder = createEmbed(FunctionArgs.question)
+		const interaction: RepliableInteraction = FunctionArgs.interaction
+
+		let embeds: EmbedBuilder[] = [originalEmbed]
+		let actionRow = new ActionRowBuilder<ButtonBuilder>()
+		let components: ButtonBuilder[] = []
+
+		const replyOptions: InteractionReplyOptions = {}
+
+		if (FunctionArgs.extra_embeds) {
+			embeds = [...FunctionArgs.extra_embeds, ...embeds]
+		}
+
+		if (FunctionArgs.extra_components) {
+			components = [...FunctionArgs.extra_components]
+		}
+
+		if (FunctionArgs.skippable) {
+			components.push(createSkipButton())
+		}
+
+		if (components.length > 0) {
+			actionRow.addComponents(...components)
+			replyOptions.components = [actionRow]
+		}
+
+		replyOptions.embeds = embeds
+
+		const message = interaction.replied ? interaction.followUp(replyOptions) : interaction.reply(replyOptions)
+
+		message.then(async (i) => {
+			const msg: Message<boolean> = await i.fetch()
+
+			createCollectors(msg, (msg) => msg.author.id === FunctionArgs.interaction.user.id && msg.mentions.members?.first() !== undefined, replyOptions, FunctionArgs)
+				.then(async (response) => {
+					if (!response) return reject('message lost?')
+
+					// Retrieve GuildMembers from User IDs
+					const members = response.mentions.members?.map(user => user)
+
+					if (!members || members?.length === 0) {
+						return resolve({ response: null, interaction, originalMessage: msg })
+					}
+
+					resolve({ response: members, interaction, originalMessage: msg })
+
+					// Edit the message based on user count
+					if (response !== null) {
+						response.delete()
+
+						const userMessage = members.length === 1 ? `You have answered: @${members[0].user.username}` : `You have answered with ${members.length} members`
+
+						msg.edit({
+							embeds: embeds,
+							components: [new ActionRowBuilder<ButtonBuilder>().addComponents(createEmptyButton(userMessage))],
+						})
+					}
+				})
+				.catch((error) => {
+					reject({
+						error: error,
+						interaction,
+						originalMessage: msg,
+					})
+					msg.edit({
+						embeds: embeds,
+						components: [],
+					})
+				})
+		})
+	})
+}
+
+
+interface Option {
+	id: string
+	option: string
+	style?: ButtonStyle
+	emoji?: string
+}
+
+/**
+ * Collect an answer as options. 
+ *
+ * @argument interaction - Inital Interaction.
+ * @argument question - The question to ask.
+ * @argument skippable - Whether the question is skippable.
+ * @argument extra_embed - An extra embed to add.
+ * @argument timeout - The time in milliseconds, for the timeout of the question.
+ * @returns The response from the user, including the original message and interaction.
+ */
+export async function optionQuestion<T extends Option[]>(FunctionArgs: FunctionArgs, options: [...T]): Promise<FunctionResponse<T[number]['id'] | null>> {
+	return new Promise((resolve, reject) => {
+		// const originalEmbed: EmbedBuilder = createEmbed(FunctionArgs.question)
+		const interaction: RepliableInteraction = FunctionArgs.interaction
+
+		let embeds: EmbedBuilder[] = []
+		let actionRow = new ActionRowBuilder<ButtonBuilder>()
+		let components: ButtonBuilder[] = []
+
+		const replyOptions: InteractionReplyOptions = {}
+
+		if (FunctionArgs.extra_embeds) {
+			embeds = [...FunctionArgs.extra_embeds, ...embeds]
+		}
+
+		options.forEach((option) => {
+			const btn = new ButtonBuilder().setCustomId(option.id).setLabel(option.option)
+
+			if (option.style) {btn.setStyle(option.style)} else {btn.setStyle(ButtonStyle.Secondary)}
+			if (option.emoji) btn.setEmoji(option.emoji)
+
+			components.push(btn)
+		})
+
+		if (FunctionArgs.extra_components) {
+			components = [...components, ...FunctionArgs.extra_components]
+		}
+
+		if (FunctionArgs.skippable) {
+			components.push(createSkipButton())
+		}
+
+		if (components.length > 0) {
+			actionRow.addComponents(...components)
+			replyOptions.components = [actionRow]
+		}
+
+		replyOptions.embeds = embeds
+		replyOptions.content = FunctionArgs.question
+
+		const message = interaction.replied ? interaction.followUp(replyOptions) : interaction.reply(replyOptions)
+
+		message.then(async (i) => {
+			const msg: Message<boolean> = await i.fetch()
+
+			msg.awaitMessageComponent({
+				filter: (i) => i.user.id === FunctionArgs.interaction.user.id,
+				time: FunctionArgs.timeout || defaultTimeout,
+			}).then((btnInteraction) => {
+				if (!btnInteraction.isButton()) return;
+				
+				if (btnInteraction.customId === 'skip') {
+					btnInteraction.update({ components: [
+						new ActionRowBuilder<ButtonBuilder>()
+							.addComponents(createEmptyButton('You have skipped this question.'))
+					] })
+					
+					return resolve({ response: null, interaction: interaction, originalMessage: msg})
+				} else if (options.map(o => o.id).includes(btnInteraction.customId)) {
+					btnInteraction.update({ 
+						components: [new ActionRowBuilder<ButtonBuilder>().addComponents(createEmptyButton(`You have answered: ${btnInteraction.customId}`, btnInteraction.component.style))],
+ 					})
+
+					return resolve({ response: btnInteraction.customId, interaction: interaction, originalMessage: msg})
 				}
-
-				resolve(filteredMessage)
-			}
-		})
-
-		collection?.on('end', (collected) => {
-			if (collected.size == 0) {
-				lastmsg.edit({ embeds: [basicEmbed('WARNING', 'You took too long to respond; Interaction Cancelled.')] })
-				reject()
-			}
+			}).catch((error) => {
+				reject({
+					error: error,
+					interaction,
+					originalMessage: msg
+				});
+			})
 		})
 	})
 }
 
-export function textChannelQuestion(interaction: CommandInteraction<CacheType> | ButtonInteraction<CacheType>, question: string, extras?: InteractionReplyOptions, timed?: number, footer?: string): Promise<GuildTextBasedChannel> {
-	return new Promise(async (resolve, reject) => {
-		let embed = new EmbedBuilder().setDescription(question).setColor(defaultColour)
+/**
+ * Collect an answer as a boolean.
+ *
+ * @argument interaction - Inital Interaction.
+ * @argument question - The question to ask.
+ * @argument skippable - Whether the question is skippable.
+ * @argument extra_embed - An extra embed to add.
+ * @argument timeout - The time in milliseconds, for the timeout of the question.
+ * @returns The response from the user, including the original message and interaction.
+ */
+export async function booleanQuestion(FunctionArgs: FunctionArgs): Promise<FunctionResponse<boolean | null>> {
+	return new Promise((resolve, reject) => {
+		const originalEmbed: EmbedBuilder = createEmbed(FunctionArgs.question)
+		const interaction: RepliableInteraction = FunctionArgs.interaction
 
-		if (footer) {
-			embed.setFooter({ text: footer })
+		let embeds: EmbedBuilder[] = [originalEmbed]
+		let actionRow = new ActionRowBuilder<ButtonBuilder>()
+		let components: ButtonBuilder[] = []
+
+		const replyOptions: InteractionReplyOptions = {}
+
+		if (FunctionArgs.extra_embeds) {
+			embeds = [...FunctionArgs.extra_embeds, ...embeds]
 		}
 
-		let lastmsg: Message | InteractionResponse
+		components = [
+			new ButtonBuilder()
+				.setCustomId('true')
+				.setEmoji('<:goodtransparent:1286651511413411871>')
+				.setStyle(ButtonStyle.Success),
+			new ButtonBuilder()
+				.setCustomId('false')
+				.setEmoji('<:badtransparent:1286651526005395466>')
+				.setStyle(ButtonStyle.Danger)
+		]
 
-		if (interaction.replied) {
-			lastmsg = await interaction.followUp({ embeds: [embed], ...extras })
-		} else {
-			lastmsg = await interaction.reply({ embeds: [embed], ...extras })
+		if (FunctionArgs.extra_components) {
+			components = [...components, ...FunctionArgs.extra_components]
 		}
 
-		const collection = interaction.channel?.createMessageCollector({
-			filter: (response: Message<boolean>) => {
-				return response.author.id == interaction.user.id
-			},
-			max: 1,
-			time: timed || 300_000,
-		})
-
-		collection?.on('collect', (message) => {
-			let og = message.mentions.channels.first() || interaction.guild?.channels.cache.get(message.content)
-			let channel = og && message.guild?.channels.cache.get(og?.id)
-			if (!channel) {
-				lastmsg.edit({ embeds: [basicEmbed('ALERT', 'Invalid Channel; please try again later.')] })
-				reject()
-			} else {
-				lastmsg.edit({
-					embeds: [embed],
-					components: [
-						new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-							new ButtonBuilder()
-								.setCustomId('nil')
-								.setLabel('You have selected #' + channel.name)
-								.setStyle(ButtonStyle.Secondary)
-								.setDisabled(true),
-						),
-					],
-				})
-				resolve(channel as TextChannel)
-			}
-		})
-
-		collection?.on('end', (collected) => {
-			if (collected.size == 0) {
-				lastmsg.edit({ embeds: [basicEmbed('WARNING', 'You took too long to respond; Interaction Cancelled.')] })
-				reject()
-			}
-		})
-	})
-}
-
-export function roleQuestion(interaction: CommandInteraction<CacheType> | ButtonInteraction<CacheType>, question: string, extras?: InteractionReplyOptions, timed?: number, footer?: string): Promise<Role> {
-	return new Promise(async (resolve, reject) => {
-		let embed = new EmbedBuilder().setDescription(question).setColor(defaultColour)
-
-		if (footer) {
-			embed.setFooter({ text: footer })
+		if (FunctionArgs.skippable) {
+			components.push(createSkipButton())
 		}
 
-		let lastmsg: Message | InteractionResponse
-
-		if (interaction.replied) {
-			lastmsg = await interaction.followUp({ embeds: [embed], ...extras })
-		} else {
-			lastmsg = await interaction.reply({ embeds: [embed], ...extras })
+		if (components.length > 0) {
+			actionRow.addComponents(...components)
+			replyOptions.components = [actionRow]
 		}
 
-		const collection = interaction.channel?.createMessageCollector({
-			filter: (response: Message<boolean>) => {
-				return response.author.id == interaction.user.id
-			},
-			max: 1,
-			time: timed || 300_000,
-		})
+		replyOptions.embeds = embeds
 
-		collection?.on('collect', (message) => {
-			let role = message.mentions.roles.first() || interaction.guild?.roles.cache.get(message.content)
+		const message = interaction.replied ? interaction.followUp(replyOptions) : interaction.reply(replyOptions)
 
-			if (!role) {
-				lastmsg.edit({ embeds: [basicEmbed('ALERT', 'Invalid Role; please try again later.')] })
-				reject()
-			} else {
-				lastmsg.edit({
-					embeds: [embed],
-					components: [
-						new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-							new ButtonBuilder()
-								.setCustomId('nil')
-								.setLabel('You have selected @' + role.name)
-								.setStyle(ButtonStyle.Secondary)
-								.setDisabled(true),
-						),
-					],
-				})
-				resolve(role)
-			}
-		})
+		message.then(async (i) => {
+			const msg: Message<boolean> = await i.fetch()
 
-		collection?.on('end', (collected) => {
-			if (collected.size == 0) {
-				lastmsg.edit({ embeds: [basicEmbed('WARNING', 'You took too long to respond; Interaction Cancelled.')] })
-				reject()
-			}
-		})
-	})
-}
-
-export function yesNoQuestion(interaction: CommandInteraction<CacheType> | ButtonInteraction<CacheType>, question: string, skipable: boolean, timed?: number, footer?: string): Promise<Boolean | null> {
-	return new Promise(async (resolve, reject) => {
-		let embed = new EmbedBuilder().setDescription(question).setColor(defaultColour)
-
-		if (skipable) {
-			embed.setFooter({ text: 'Enter skip to skip this input.' })
-		}
-
-		if (footer) {
-			embed.setFooter({ text: footer })
-		}
-
-		const actionRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new ButtonBuilder().setCustomId('yes').setLabel('Yes').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('no').setLabel('No').setStyle(ButtonStyle.Secondary))
-
-		let lastmsg: Message | InteractionResponse
-
-		if (interaction.replied) {
-			lastmsg = await interaction.followUp({ embeds: [embed], components: [actionRow] })
-		} else {
-			lastmsg = await interaction.reply({ embeds: [embed], components: [actionRow] })
-		}
-
-		const collection = interaction.channel?.awaitMessageComponent({
-			filter: (response) => {
-				response.deferUpdate()
-				return response.user.id == interaction.user.id && (response.customId == 'yes' || response.customId == 'no')
-			},
-			componentType: ComponentType.Button,
-			time: timed || 300_000,
-			dispose: true,
-		})
-
-		collection?.then((btnInteraction) => {
-			if (btnInteraction.customId == 'yes') {
-				resolve(true)
-				lastmsg.edit({ embeds: [embed], components: [new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new ButtonBuilder().setCustomId('nil').setLabel('You have selected YES').setStyle(ButtonStyle.Success).setDisabled(true))] })
-			} else {
-				resolve(false)
-				lastmsg.edit({ embeds: [embed], components: [new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new ButtonBuilder().setCustomId('nil').setLabel('You have selected NO').setStyle(ButtonStyle.Secondary).setDisabled(true))] })
-			}
-		})
-	})
-}
-
-export function usersQuestion(interaction: CommandInteraction<CacheType> | ButtonInteraction<CacheType>, question: string, timed?: number, footer?: string): Promise<User[]> {
-	return new Promise(async (resolve, reject) => {
-		let embed = new EmbedBuilder().setDescription(question).setColor(defaultColour)
-
-		if (footer) {
-			embed.setFooter({ text: footer })
-		}
-
-		let lastmsg: Message | InteractionResponse
-
-		if (interaction.replied) {
-			lastmsg = await interaction.followUp({ embeds: [embed] })
-		} else {
-			lastmsg = await interaction.reply({ embeds: [embed] })
-		}
-
-		const collection = interaction.channel?.createMessageCollector({
-			filter: (response: Message<boolean>) => {
-				return response.author.id == interaction.user.id
-			},
-			max: 1,
-			time: timed || 300_000,
-		})
-
-		collection?.on('collect', async (message) => {
-			// let users = message.mentions.users;
-			const regex = /<@(\d+)>/g
-
-			let users: User[] = []
-			let match
-
-			while ((match = regex.exec(message.content)) !== null) {
-				const user = await interaction.client.users.fetch(match[1])
-				if (user) users.push(user)
-			}
-
-			if (users.length === 0) {
-				lastmsg.edit({ embeds: [basicEmbed('ALERT', 'Invalid User; please try again later.')] })
-				reject()
-			} else {
-				resolve(users)
-			}
-		})
-
-		collection?.on('end', (collected) => {
-			if (collected.size == 0) {
-				lastmsg.edit({ embeds: [basicEmbed('WARNING', 'You took too long to respond; Interaction Cancelled.')] })
-				reject()
-			}
-		})
-	})
-}
-
-export function numberQuestion(interaction: CommandInteraction<CacheType> | ButtonInteraction<CacheType>, question: string, timed?: number, footer?: string): Promise<number> {
-	return new Promise(async (resolve, reject) => {
-		let embed = new EmbedBuilder().setDescription(question).setColor(defaultColour)
-
-		if (footer) {
-			embed.setFooter({ text: footer })
-		}
-
-		let lastmsg: Message | InteractionResponse
-
-		if (interaction.replied) {
-			lastmsg = await interaction.followUp({ embeds: [embed] })
-		} else {
-			lastmsg = await interaction.reply({ embeds: [embed] })
-		}
-
-		const collection = interaction.channel?.createMessageCollector({
-			filter: (response: Message<boolean>) => {
-				return response.author.id == interaction.user.id
-			},
-			max: 1,
-			time: timed || 300_000,
-		})
-
-		collection?.on('collect', async (message) => {
-			const num = Number(message.content)
-
-			if (!isNaN(num) && Number.isInteger(num) && num >= 0) {
-				resolve(Number(message.content))
-			} else {
-				lastmsg.edit({ embeds: [basicEmbed('ALERT', 'Invalid Number; please try again later.')] })
-				reject('Invalid Number Provided')
-			}
-		})
-
-		collection?.on('end', (collected) => {
-			if (collected.size == 0) {
-				lastmsg.edit({ embeds: [basicEmbed('WARNING', 'You took too long to respond; Interaction Cancelled.')] })
-				reject()
-			}
-		})
-	})
-}
-
-export function imageQuestion(interaction: CommandInteraction<CacheType> | ButtonInteraction<CacheType>, question: string, skipable: boolean, timed?: number, footer?: string): Promise<string | null> {
-	return new Promise(async (resolve, reject) => {
-		let embed = new EmbedBuilder()
-			.setDescription(question)
-			.setFooter({ text: footer || skipable ? 'Enter skip to skip this input.' : '' })
-			.setColor(defaultColour)
-
-		let lastmsg: Message | InteractionResponse
-
-		if (interaction.replied) {
-			lastmsg = await interaction.followUp({ embeds: [embed] })
-		} else {
-			lastmsg = await interaction.reply({ embeds: [embed] })
-		}
-
-		const collection = interaction.channel?.createMessageCollector({
-			filter: (response: Message<boolean>) => {
-				return response.author.id == interaction.user.id
-			},
-			max: 1,
-			time: timed || 300_000,
-		})
-
-		collection?.on('collect', (message) => {
-			if (message.content.toLowerCase() == 'skip' && skipable) {
-				resolve(null)
-			} else {
-				const attachment = message.attachments.first()
-
-				if (attachment) {
-					resolve(attachment.url)
+			msg.awaitMessageComponent({
+				filter: (i) => i.user.id === FunctionArgs.interaction.user.id,
+				time: FunctionArgs.timeout || defaultTimeout,
+			}).then((btnInteraction) => {
+				if (!btnInteraction.isButton()) return;
+				
+				if (btnInteraction.customId === 'skip') {
+					btnInteraction.update({ components: [
+						new ActionRowBuilder<ButtonBuilder>()
+							.addComponents(createEmptyButton('You have skipped this question.'))
+					] })
+					
+					return resolve({ response: null, interaction: interaction, originalMessage: msg})
 				} else {
-					resolve(null)
-				}
-			}
-		})
+					btnInteraction.update({ 
+						components: [new ActionRowBuilder<ButtonBuilder>().addComponents(createEmptyButton(`You have answered: ${btnInteraction.customId}`, btnInteraction.component.style))],
+ 					})
 
-		collection?.on('end', (collected) => {
-			if (collected.size == 0) {
-				lastmsg.edit({ embeds: [basicEmbed('WARNING', 'You took too long to respond; Interaction Cancelled.')] })
-				reject()
-			}
+					let option = null
+
+					if (btnInteraction.customId === 'yes') {
+						option = true
+					} else {
+						option = false
+					}
+
+					return resolve({ response: option, interaction: interaction, originalMessage: msg})
+				}
+			}).catch((error) => {
+				reject({
+					error: error,
+					interaction,
+					originalMessage: msg
+				});
+			})
+		})
+	})
+}
+
+// Here lies attachment question - it was unneeded for purser
+/**
+ * Collect an answer as an Attachment.
+ *
+ * @argument interaction - Inital Interaction.
+ * @argument question - The question to ask.
+ * @argument skippable - Whether the question is skippable.
+ * @argument extra_embed - An extra embed to add.
+ * @argument timeout - The time in milliseconds, for the timeout of the question.
+ * @returns The response from the user, including the original message and interaction.
+ */
+export async function attachmentQuestion(FunctionArgs: FunctionArgs): Promise<FunctionResponse<Attachment | null>> {
+	return new Promise((resolve, reject) => {
+		const originalEmbed: EmbedBuilder = createEmbed(FunctionArgs.question)
+		const interaction: RepliableInteraction = FunctionArgs.interaction
+
+		let embeds: EmbedBuilder[] = [originalEmbed]
+		let actionRow = new ActionRowBuilder<ButtonBuilder>()
+		let components: ButtonBuilder[] = []
+
+		const replyOptions: InteractionReplyOptions = {}
+
+		if (FunctionArgs.extra_embeds) {
+			embeds = [...FunctionArgs.extra_embeds, ...embeds]
+		}
+
+		if (FunctionArgs.extra_components) {
+			components = [...FunctionArgs.extra_components]
+		}
+
+		if (FunctionArgs.skippable) {
+			components.push(createSkipButton())
+		}
+
+		if (components.length > 0) {
+			actionRow.addComponents(...components)
+			replyOptions.components = [actionRow]
+		} 
+
+		replyOptions.embeds = embeds
+
+		const message = interaction.replied ? interaction.followUp(replyOptions) : interaction.reply(replyOptions)
+
+		message.then(async (i) => {
+			const msg: Message<boolean> = await i.fetch()
+
+			createCollectors(msg, (msg) => msg.author.id === FunctionArgs.interaction.user.id && msg.attachments.first() !== undefined, replyOptions, FunctionArgs)
+				.then(async (response) => {
+					let attachment: Attachment = await response?.attachments.first() as Attachment
+
+					const download = await interaction.followUp({ embeds: [basicEmbed('WAITING', 'Downloading...')] })
+
+					if (attachment) {
+						const logChannel = (await (await interaction.client.guilds.fetch(process.env.TEST_GUILD_ID)).channels.fetch()).filter(channel => channel?.type === ChannelType.GuildText).first()
+						if (logChannel) {
+							attachment = (await logChannel.send({files: [attachment]})).attachments.first() as Attachment
+						}
+					}
+
+					download.delete();
+
+					resolve({ response: attachment || null, interaction, originalMessage: msg })
+
+					if (response !== null) {
+						response.delete()
+
+						if (attachment.name.length < 80 - 19) {
+							msg.edit({
+								embeds: embeds,
+								components: [new ActionRowBuilder<ButtonBuilder>().addComponents(createEmptyButton(`You have answered: ${attachment.name}`))],
+							})
+						}
+					}
+				})
+				.catch((error) => {
+					reject(error)
+					msg.edit({
+						embeds: embeds,
+						components: [],
+					})
+				})
 		})
 	})
 }

@@ -1,6 +1,6 @@
 import { ColorResolvable, EmbedBuilder } from 'discord.js'
 
-function emoji(status: 'ALERT' | 'WARNING' | 'GOOD'): { emoji: string; color: ColorResolvable } {
+function emoji(status: 'ALERT' | 'WARNING' | 'GOOD' | 'BAD' | 'WAITING'): { emoji: string; color: ColorResolvable } {
 	switch (status) {
 		case 'ALERT':
 			return {
@@ -17,10 +17,20 @@ function emoji(status: 'ALERT' | 'WARNING' | 'GOOD'): { emoji: string; color: Co
 				emoji: '<:good:1256020727111614586>',
 				color: '#14391d',
 			}
+		case 'BAD':
+			return {
+				emoji: '<:bad:1286647140898308147>',
+				color: '#250606',
+			}
+		case 'WAITING':
+			return {
+				emoji: '<a:Loading:1289587154703614045>',
+				color: '#2cc1ef'
+			}
 	}
 }
 
-export default function (status: 'ALERT' | 'WARNING' | 'GOOD', msg: string): EmbedBuilder {
+export function basicEmbed(status: 'ALERT' | 'WARNING' | 'GOOD' | 'BAD' | 'WAITING', msg: string): EmbedBuilder {
 	const brand = emoji(status)
 
 	return new EmbedBuilder().setDescription(brand.emoji + '_ _ ' + msg).setColor(brand.color)
