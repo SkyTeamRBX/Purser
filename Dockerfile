@@ -17,7 +17,7 @@ COPY tsconfig.json   .
 # Build project
 RUN npm run build
 
-## production runner
+## producation runner
 FROM node:lts-alpine as prod-runner
 
 # Set work directory
@@ -27,10 +27,13 @@ WORKDIR /app
 COPY --from=build-runner /tmp/app/package.json /app/package.json
 
 # Install dependencies
-RUN npm install
+RUN npm install --omit=dev
 
 # Move build files
 COPY --from=build-runner /tmp/app/build /app/build
+
+# test
+RUN ls
 
 # Start bot
 CMD [ "npm", "run", "start" ]
