@@ -1,9 +1,8 @@
-import type { ButtonInteraction, ColorResolvable, CommandInteraction, GuildBasedChannel, GuildTextBasedChannel, MessageActionRowComponentBuilder, TextBasedChannel, TextChannel } from 'discord.js'
-import { ActionRowBuilder, ApplicationCommandOptionType, ButtonBuilder, ButtonStyle, Embed, EmbedBuilder } from 'discord.js'
-import { Bot, ButtonComponent, Discord, Guild, Slash, SlashOption } from 'discordx'
+import type { ColorResolvable, CommandInteraction } from 'discord.js'
+import { ApplicationCommandOptionType, ButtonStyle, EmbedBuilder } from 'discord.js'
+import { Discord, Slash, SlashOption } from 'discordx'
 
 import { textChannelQuestion, stringQuestion, attachmentQuestion, optionQuestion } from '../util/messageCollection.js'
-import { styleText } from 'util'
 import { basicEmbed } from '../util/basicEmbed.js'
 
 const timeEachQuestion = 216000_000 // 1 hour

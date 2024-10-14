@@ -1,4 +1,3 @@
-import { channel } from 'diagnostics_channel'
 import { EmbedBuilder, Message, InteractionReplyOptions, ActionRowBuilder, ButtonBuilder, ButtonStyle, BaseInteraction, RepliableInteraction, GuildTextBasedChannel, TextChannel, Role, GuildMember, User, ButtonInteraction, Attachment, ChannelType} from 'discord.js'
 import { basicEmbed } from './basicEmbed.js'
 
