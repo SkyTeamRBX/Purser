@@ -5,7 +5,7 @@
     "outDir": "build",
     "rootDir": "src",
     "strict": true,
-    "moduleResolution": "Node10",
+    "moduleResolution": "Node",
     "allowSyntheticDefaultImports": true,
 
     "experimentalDecorators": true,
