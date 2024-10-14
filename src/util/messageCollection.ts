@@ -35,9 +35,9 @@ function createEmptyButton(contents: string, style?: ButtonStyle): ButtonBuilder
 function createCollectors(Message: Message, filter: (Message: Message) => boolean, OldReplyOptions: InteractionReplyOptions, FunctionArgs: FunctionArgs): Promise<Message<boolean> | null> {
 	return new Promise((resolve, reject) => {
 		try {
-			if (Message.channel.type === ChannelType.DM) reject('Cannot process DM Channels.');
+			const channel = Message.channel as TextChannel
 			let a
-			Message.channel
+			channel
 				.awaitMessages({
 					filter,
 					max: 1,
