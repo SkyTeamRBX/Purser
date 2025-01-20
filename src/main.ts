@@ -5,13 +5,19 @@ import type { Interaction, Message } from 'discord.js'
 import { IntentsBitField } from 'discord.js'
 import { Client } from 'discordx'
 
+console.log(`
+	Starting purser on following guilds:
+		- HOME=${process.env.HOME_GUILD_ID}
+		- TEST=${process.env.TEST_GUILD_ID}
+	`)
+
 // Bot Configuration
 export const bot = new Client({
 	// Intents
 	intents: [IntentsBitField.Flags.Guilds, IntentsBitField.Flags.GuildMembers, IntentsBitField.Flags.GuildMessages, IntentsBitField.Flags.GuildMessageReactions, IntentsBitField.Flags.GuildVoiceStates, IntentsBitField.Flags.MessageContent],
 
 	// Locked Guilds
-	botGuilds: [process.env.HOME_GUILD_ID || ''],
+	botGuilds: [process.env.HOME_GUILD_ID, process.env.TEST_GUILD_ID],
 
 	silent: false,
 
