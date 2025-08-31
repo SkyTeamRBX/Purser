@@ -22,11 +22,11 @@
   },
   "homepage": "https://github.com/SkyTeamRBX/Purser#readme",
   "dependencies": {
-    "@discordx/importer": "^1.3.0",
-    "@discordx/pagination": "^3.5.0",
-    "@discordx/utilities": "^7.0.3",
-    "discord.js": "^14.14.1",
-    "discordx": "^11.9.0",
+    "@discordx/importer": "^1.3.3",
+    "@discordx/pagination": "^3.6.0",
+    "@discordx/utilities": "^7.0.5",
+    "discord.js": "^14.22.1",
+    "discordx": "^11.12.6",
     "dotenv": "^16.4.5"
   },
   "devDependencies": {
