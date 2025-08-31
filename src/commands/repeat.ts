@@ -17,10 +17,10 @@ export class RepeatCommand {
 			required: true,
 			type: ApplicationCommandOptionType.Channel,
 		})
-		image: Attachment,
+		channel: TextChannel,
 		interaction: CommandInteraction,
 	): Promise<void> {
-		const channel = interaction.options.get('channel')?.channel as TextChannel
+		// const channel = interaction.options.get('channel')?.channel as TextChannel
 
 		if (channel.isTextBased() && interaction.channel) {
 			if (channel.guild.members.me?.permissionsIn(channel).has(PermissionFlagsBits.SendMessages)) {
