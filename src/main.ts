@@ -8,7 +8,6 @@ import { Client } from 'discordx'
 console.log(`
 	Starting purser on following guilds:
 		- HOME=${process.env.HOME_GUILD_ID}
-		- TEST=${process.env.TEST_GUILD_ID}
 	`)
 
 // Bot Configuration
@@ -17,7 +16,7 @@ export const bot = new Client({
 	intents: [IntentsBitField.Flags.Guilds, IntentsBitField.Flags.GuildMembers, IntentsBitField.Flags.GuildMessages, IntentsBitField.Flags.GuildMessageReactions, IntentsBitField.Flags.GuildVoiceStates, IntentsBitField.Flags.MessageContent],
 
 	// Locked Guilds
-	botGuilds: [process.env.HOME_GUILD_ID, process.env.TEST_GUILD_ID],
+	botGuilds: [process.env.HOME_GUILD_ID],
 
 	silent: false,
 
@@ -26,7 +25,7 @@ export const bot = new Client({
 	},
 })
 
-bot.once('ready', async () => {
+bot.once('clientReady', async () => {
 	await bot.initApplicationCommands()
 
 	console.log('Logged in on ' + bot.user?.tag)

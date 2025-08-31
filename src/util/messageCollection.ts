@@ -803,7 +803,7 @@ export async function attachmentQuestion(FunctionArgs: FunctionArgs): Promise<Fu
 					const download = await interaction.followUp({ embeds: [basicEmbed('WAITING', 'Downloading...')] })
 
 					if (attachment) {
-						const logChannel = (await (await interaction.client.guilds.fetch(process.env.TEST_GUILD_ID)).channels.fetch()).filter(channel => channel?.type === ChannelType.GuildText).first()
+						const logChannel = interaction.guild?.channels.cache.get(process.env.LOG_CHANNEL_ID) as TextChannel | undefined
 						if (logChannel && logChannel.type === ChannelType.GuildText) {
 							attachment = (await logChannel.send({files: [attachment]})).attachments.first() as Attachment
 						}
