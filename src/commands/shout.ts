@@ -1,7 +1,6 @@
-import { APIUnfurledMediaItem, ButtonInteraction, ButtonStyle, ChannelSelectMenuBuilder, CommandInteraction, Component, ComponentBuilder, ComponentType, GuildTextBasedChannel, InteractionResponse, MediaGalleryBuilder, MediaGalleryItemBuilder, Message, MessageFlags, SectionBuilder, SelectMenuInteraction, SeparatorBuilder, SeparatorSpacingSize } from 'discord.js'
-import { ActionRowBuilder, ButtonBuilder, ContainerBuilder, EmbedBuilder, TextDisplayBuilder } from 'discord.js'
+import { ButtonInteraction, ButtonStyle, ChannelSelectMenuBuilder, CommandInteraction, GuildTextBasedChannel, InteractionResponse, MediaGalleryBuilder, MediaGalleryItemBuilder, MessageFlags, SectionBuilder, SelectMenuInteraction, SeparatorBuilder, SeparatorSpacingSize } from 'discord.js'
+import { ActionRowBuilder, ButtonBuilder, ContainerBuilder, TextDisplayBuilder } from 'discord.js'
 import { ButtonComponent, Discord, MetadataStorage, SelectMenuComponent, Slash } from 'discordx'
-import { stringQuestion } from '../util/messageCollection.js'
 
 @Discord()
 export class ShoutCommand {
@@ -17,9 +16,9 @@ export class ShoutCommand {
 			new ButtonBuilder().setCustomId('delete_last').setLabel('Delete Last Component').setStyle(ButtonStyle.Danger),
 		),
 		new ActionRowBuilder<ChannelSelectMenuBuilder | ButtonBuilder>().addComponents(
-            new ChannelSelectMenuBuilder().setCustomId('send_to_channel').setPlaceholder('📢  Send to channel'),
-            // new ButtonBuilder().setCustomId('cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger),
-        ),
+			new ChannelSelectMenuBuilder().setCustomId('send_to_channel').setPlaceholder('📢  Send to channel'),
+			// new ButtonBuilder().setCustomId('cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger),
+		),
 	]
 
 	async updatePreview() {
@@ -41,15 +40,15 @@ export class ShoutCommand {
 
 		if (this.ongoingMessage) {
 			this.ongoingMessage.edit({
-                flags: [MessageFlags.IsComponentsV2],
-                components: [
-                    new TextDisplayBuilder({
-                        content: 'Cancelled. Cannot run more than 1 `/shout` command at a time.'
-                    })
-                ]
-            })
+				flags: [MessageFlags.IsComponentsV2],
+				components: [
+					new TextDisplayBuilder({
+						content: 'Cancelled. Cannot run more than 1 `/shout` command at a time.',
+					}),
+				],
+			})
 			this.ongoingMessage = null
-            this.displayContainer = null
+			this.displayContainer = null
 		}
 
 		this.displayContainer = new ContainerBuilder().addTextDisplayComponents(
@@ -72,240 +71,278 @@ export class ShoutCommand {
 		if (!this.displayContainer) return
 		if (!interaction.isRepliable()) return
 
-		stringQuestion({
-			interaction,
-			question: 'Please enter the text that you would like to add.',
+		const reply = await interaction.reply({
+			content: 'Please enter the text that you would like to add.',
+			flags: [MessageFlags.Ephemeral],
 		})
-			.then((value) => {
-				if (value.response && this.displayContainer) {
+
+		interaction.channel
+			?.awaitMessages({
+				filter: (m) => m.author.id === interaction.user.id,
+				max: 1,
+				time: 60000,
+				errors: ['time'],
+			})
+			.then(async (collected) => {
+				const msg = collected.first()
+
+				if (msg && this.displayContainer) {
 					this.displayContainer.addTextDisplayComponents(
 						new TextDisplayBuilder({
-							content: value.response,
+							content: msg.content,
 						}),
 					)
 
-					this.updatePreview()
+					reply.delete().catch(() => {})
+					msg.delete().catch(() => {})
 
-                    if (value.originalMessage && value.originalMessage.deletable) {
-                        value.originalMessage.delete().catch(() => {});
-                    }
+					this.updatePreview()
 				}
 			})
-			.catch((err) => {
-				return err
+			.catch(() => {
+				interaction.editReply({
+					content: 'You did not provide any text in time.',
+				})
 			})
+
+		// stringQuestion({
+		// 	interaction,
+		// 	question: 'Please enter the text that you would like to add.',
+		// })
+		// 	.then((value) => {
+		// 		if (value.response && this.displayContainer) {
+		// 			this.displayContainer.addTextDisplayComponents(
+		// 				new TextDisplayBuilder({
+		// 					content: value.response,
+		// 				}),
+		// 			)
+
+		// 			this.updatePreview()
+
+		//             if (value.originalMessage && value.originalMessage.deletable) {
+		//                 value.originalMessage.delete().catch(() => {});
+		//             }
+		// 		}
+		// 	})
+		// 	.catch((err) => {
+		// 		return err
+		// 	})
 	}
 
-    @ButtonComponent({ id: 'add_separator' })
+	@ButtonComponent({ id: 'add_separator' })
 	async addSeparator(interaction: ButtonInteraction) {
 		if (!this.displayContainer) return
 		if (!interaction.isRepliable()) return
 
 		if (this.displayContainer) {
-            this.displayContainer.addSeparatorComponents(
-                new SeparatorBuilder({
-                    spacing: SeparatorSpacingSize.Large
-                })
-            )
+			this.displayContainer.addSeparatorComponents(
+				new SeparatorBuilder({
+					spacing: SeparatorSpacingSize.Large,
+				}),
+			)
 
-            interaction.deferUpdate()
-            this.updatePreview()
-        }
+			interaction.deferUpdate()
+			this.updatePreview()
+		}
 	}
 
-    @ButtonComponent({ id: 'add_media' })
+	@ButtonComponent({ id: 'add_media' })
 	async addMedia(interaction: ButtonInteraction) {
 		if (!this.displayContainer) return
 		if (!interaction.isRepliable()) return
 
 		if (this.displayContainer) {
-            let reply = await interaction.reply({
-                content: 'Please upload up to 10 images or videos to add to the shout.',
-                flags: [MessageFlags.Ephemeral]
-            })
+			let reply = await interaction.reply({
+				content: 'Please upload up to 10 images or videos to add to the shout.',
+				flags: [MessageFlags.Ephemeral],
+			})
 
-            interaction.channel?.awaitMessages({
-                filter: m => m.author.id === interaction.user.id && m.attachments.size > 0,
-                max: 1,
-                time: 60000, // 1 minute
-                errors: ['time']
-            }).then(async collected => {
-                const originalmsg = collected.first();
+			interaction.channel
+				?.awaitMessages({
+					filter: (m) => m.author.id === interaction.user.id && m.attachments.size > 0,
+					max: 1,
+					time: 60000, // 1 minute
+					errors: ['time'],
+				})
+				.then(async (collected) => {
+					const originalmsg = collected.first()
 
-                if (originalmsg) {
-                    const logschannel = await interaction.client.channels.fetch(process.env.LOG_CHANNEL_ID) as GuildTextBasedChannel
-                    const logged = await logschannel.send({
-                        content: 'This is the logged media for a shout by ' + interaction.user.tag,
-                        files: originalmsg.attachments.map(a => a.url)
-                    })
-                    let MediaGallery = new MediaGalleryBuilder()
+					if (originalmsg) {
+						const logschannel = (await interaction.client.channels.fetch(process.env.LOG_CHANNEL_ID)) as GuildTextBasedChannel
+						const logged = await logschannel.send({
+							content: 'This is the logged media for a shout by ' + interaction.user.tag,
+							files: originalmsg.attachments.map((a) => a.url),
+						})
+						let MediaGallery = new MediaGalleryBuilder()
 
-                    logged.attachments.forEach(attachment => {
-                        MediaGallery.addItems(
-                            new MediaGalleryItemBuilder({
-                                media: {
-                                    url: attachment.url,
-                                }
-                            })
-                        )
-                    })
+						logged.attachments.forEach((attachment) => {
+							MediaGallery.addItems(
+								new MediaGalleryItemBuilder({
+									media: {
+										url: attachment.url,
+									},
+								}),
+							)
+						})
 
-                    this.displayContainer.addMediaGalleryComponents(MediaGallery)
+						this.displayContainer.addMediaGalleryComponents(MediaGallery)
 
-                    reply.delete().catch(() => {});
-                    originalmsg.delete().catch(() => {});
+						reply.delete().catch(() => {})
+						originalmsg.delete().catch(() => {})
 
-                    this.updatePreview()
-                }
-            })
-        }
+						this.updatePreview()
+					}
+				})
+		}
 	}
 
-    @ButtonComponent({ id: 'add_section' })
-    async addSection(interaction: ButtonInteraction) {
-        if (!this.displayContainer) return;
-        if (!interaction.isRepliable()) return;
+	@ButtonComponent({ id: 'add_section' })
+	async addSection(interaction: ButtonInteraction) {
+		if (!this.displayContainer) return
+		if (!interaction.isRepliable()) return
 
-        let reply = await interaction.reply({
-            flags: [MessageFlags.Ephemeral],
-            content: 'Please enter a text message and a labelled hyperlink with a space in between. For example: `Label [Button Label](https://example.com)`\n-# Button label must be 34 characters or less.'
-        })
+		let reply = await interaction.reply({
+			flags: [MessageFlags.Ephemeral],
+			content: 'Please enter a text message and a labelled hyperlink with a space in between. For example: `Label [Button Label](https://example.com)`\n-# Button label must be 34 characters or less.',
+		})
 
-        interaction.channel?.awaitMessages({
-                filter: m => m.author.id === interaction.user.id,
-                max: 1,
-                time: 60000, // 1 minute
-                errors: ['time']
-            }).then(async collected => {
-                const msg = collected.first();
+		interaction.channel
+			?.awaitMessages({
+				filter: (m) => m.author.id === interaction.user.id,
+				max: 1,
+				time: 60000, // 1 minute
+				errors: ['time'],
+			})
+			.then(async (collected) => {
+				const msg = collected.first()
 
-                if (msg) {
-                    // check and seperate regex here
-                    const regex = /^(.*?)\s*\[([^\]]{1,34})\]\((https?:\/\/[^\s]+)\)$/;
-                    const match = msg.content.match(regex);
+				if (msg) {
+					// check and seperate regex here
+					const regex = /^(.*?)\s*\[([^\]]{1,34})\]\((https?:\/\/[^\s]+)\)$/
+					const match = msg.content.match(regex)
 
-                    if (!match) {
-                        interaction.editReply({
-                            content: 'Invalid input. Please ensure you follow the format.'
-                        })
-                        return;
-                    }
+					if (!match) {
+						interaction.editReply({
+							content: 'Invalid input. Please ensure you follow the format.',
+						})
+						return
+					}
 
-                    const label = match[1].trim();
-                    const buttonLabel = match[2].trim();
-                    const link = match[3].trim();
+					const label = match[1].trim()
+					const buttonLabel = match[2].trim()
+					const link = match[3].trim()
 
-                    this.displayContainer.addSectionComponents(
-                        new SectionBuilder()
-                            .addTextDisplayComponents(
-                                new TextDisplayBuilder({
-                                    content: label
-                                })
-                            )
-                            .setButtonAccessory(
-                                new ButtonBuilder({
-                                    label: buttonLabel,
-                                    style: ButtonStyle.Link,
-                                    url: link
-                                })
-                            )
-                    )
+					this.displayContainer.addSectionComponents(
+						new SectionBuilder()
+							.addTextDisplayComponents(
+								new TextDisplayBuilder({
+									content: label,
+								}),
+							)
+							.setButtonAccessory(
+								new ButtonBuilder({
+									label: buttonLabel,
+									style: ButtonStyle.Link,
+									url: link,
+								}),
+							),
+					)
 
-                    reply.delete().catch(() => {});
-                    msg.delete().catch(() => {});
+					reply.delete().catch(() => {})
+					msg.delete().catch(() => {})
 
-                    this.updatePreview()
-                }
-            })
-    }
+					this.updatePreview()
+				}
+			})
+	}
 
-    //
+	//
 
-    @ButtonComponent({ id: 'delete_last' })
-    async deleteLast(interaction: ButtonInteraction) {
-        if (!this.displayContainer) return
-        if (!interaction.isRepliable()) return
+	@ButtonComponent({ id: 'delete_last' })
+	async deleteLast(interaction: ButtonInteraction) {
+		if (!this.displayContainer) return
+		if (!interaction.isRepliable()) return
 
-        interaction.deferUpdate()
+		interaction.deferUpdate()
 
-        if (!this.started) {
-            let gotReset: boolean = false
+		if (!this.started) {
+			let gotReset: boolean = false
 
-            this.displayContainer.spliceComponents(-1, 1)
+			this.displayContainer.spliceComponents(-1, 1)
 
-            if (this.displayContainer.components.length === 0) {
-                this.displayContainer.addTextDisplayComponents(
-                    new TextDisplayBuilder({
-                        content: '-# There is currently nothing in this shout. Use the buttons below to add components to the message!',
-                    }),
-                )
+			if (this.displayContainer.components.length === 0) {
+				this.displayContainer.addTextDisplayComponents(
+					new TextDisplayBuilder({
+						content: '-# There is currently nothing in this shout. Use the buttons below to add components to the message!',
+					}),
+				)
 
-                gotReset = true
-            }
+				gotReset = true
+			}
 
-            this.updatePreview()
+			this.updatePreview()
 
-            if (gotReset) {
-                this.started = true // UGLY fix
-            }
-        }
-    }
+			if (gotReset) {
+				this.started = true // UGLY fix
+			}
+		}
+	}
 
-    @ButtonComponent({ id: 'cancel' })
-    async cancel(interaction: ButtonInteraction) {
-        if (this.ongoingMessage && this.displayContainer) {
-            this.ongoingMessage.edit({
-                flags: [MessageFlags.IsComponentsV2],
-                components: [
-                    new TextDisplayBuilder({
-                        content: 'Cancelled operation.'
-                    })
-                ]
-            })
+	@ButtonComponent({ id: 'cancel' })
+	async cancel(interaction: ButtonInteraction) {
+		if (this.ongoingMessage && this.displayContainer) {
+			this.ongoingMessage.edit({
+				flags: [MessageFlags.IsComponentsV2],
+				components: [
+					new TextDisplayBuilder({
+						content: 'Cancelled operation.',
+					}),
+				],
+			})
 
-            this.ongoingMessage = null
-            this.displayContainer = null
-            this.started = false
-        }
-    }
+			this.ongoingMessage = null
+			this.displayContainer = null
+			this.started = false
+		}
+	}
 
-    @SelectMenuComponent({ id: 'send_to_channel' })
-    async sendToChannel(interaction: SelectMenuInteraction) {
-        if (!this.displayContainer) return
-        if (!interaction.isRepliable()) return
+	@SelectMenuComponent({ id: 'send_to_channel' })
+	async sendToChannel(interaction: SelectMenuInteraction) {
+		if (!this.displayContainer) return
+		if (!interaction.isRepliable()) return
 
-        const channel = interaction.guild?.channels.cache.get(interaction.values[0])
+		const channel = interaction.guild?.channels.cache.get(interaction.values[0])
 
-        if (!channel || !channel.isTextBased()) {
-            interaction.reply({
-                content: 'Invalid channel selected. Please try again.',
-                flags: [MessageFlags.Ephemeral]
-            })
-            return;
-        }
+		if (!channel || !channel.isTextBased()) {
+			interaction.reply({
+				content: 'Invalid channel selected. Please try again.',
+				flags: [MessageFlags.Ephemeral],
+			})
+			return
+		}
 
-        if (!interaction.guild?.members.me?.permissionsIn(channel).has(['ViewChannel', 'SendMessages', 'EmbedLinks', 'AttachFiles'])) {
-            interaction.reply(`I don't have permission to speak in that channel :(`)
-            return;
-        }
+		if (!interaction.guild?.members.me?.permissionsIn(channel).has(['ViewChannel', 'SendMessages', 'EmbedLinks', 'AttachFiles'])) {
+			interaction.reply(`I don't have permission to speak in that channel :(`)
+			return
+		}
 
-        channel.send({
-            flags: [MessageFlags.IsComponentsV2],
-            components: [this.displayContainer]
-        })
+		channel.send({
+			flags: [MessageFlags.IsComponentsV2],
+			components: [this.displayContainer],
+		})
 
-        this.ongoingMessage.edit({
-            flags: [MessageFlags.IsComponentsV2],
-            components: [
-                new TextDisplayBuilder({
-                    content: 'Successfully sent the shout to #' + channel.name
-                }),
-                this.displayContainer
-            ]
-        })
+		this.ongoingMessage.edit({
+			flags: [MessageFlags.IsComponentsV2],
+			components: [
+				new TextDisplayBuilder({
+					content: 'Successfully sent the shout to #' + channel.name,
+				}),
+				this.displayContainer,
+			],
+		})
 
-        this.ongoingMessage = null
-        this.displayContainer = null
-        this.started = false
-    }
+		this.ongoingMessage = null
+		this.displayContainer = null
+		this.started = false
+	}
 }
