@@ -34,6 +34,8 @@ export class ShoutCommand {
 	@Slash({
 		name: 'shout',
 		description: 'Shout a message to a channel',
+		dmPermission: false,
+		defaultMemberPermissions: ['Administrator'],
 	})
 	async execute(interaction: CommandInteraction): Promise<void> {
 		if (!interaction.isRepliable()) return
