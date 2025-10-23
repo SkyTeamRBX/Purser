@@ -1,7 +1,6 @@
-import { APIUnfurledMediaItem, ButtonInteraction, ButtonStyle, ChannelSelectMenuBuilder, CommandInteraction, Component, ComponentBuilder, ComponentType, GuildTextBasedChannel, InteractionResponse, MediaGalleryBuilder, MediaGalleryItemBuilder, Message, MessageFlags, SectionBuilder, SelectMenuInteraction, SeparatorBuilder, SeparatorSpacingSize } from 'discord.js'
-import { ActionRowBuilder, ButtonBuilder, ContainerBuilder, EmbedBuilder, TextDisplayBuilder } from 'discord.js'
+import { ButtonInteraction, ButtonStyle, ChannelSelectMenuBuilder, CommandInteraction, GuildTextBasedChannel, InteractionResponse, MediaGalleryBuilder, MediaGalleryItemBuilder, MessageFlags, SectionBuilder, SelectMenuInteraction, SeparatorBuilder, SeparatorSpacingSize } from 'discord.js'
+import { ActionRowBuilder, ButtonBuilder, ContainerBuilder, TextDisplayBuilder } from 'discord.js'
 import { ButtonComponent, Discord, MetadataStorage, SelectMenuComponent, Slash } from 'discordx'
-import { stringQuestion } from '../util/messageCollection.js'
 
 @Discord()
 export class ShoutCommand {
@@ -74,28 +73,62 @@ export class ShoutCommand {
 		if (!this.displayContainer) return
 		if (!interaction.isRepliable()) return
 
-		stringQuestion({
-			interaction,
-			question: 'Please enter the text that you would like to add.',
+		const reply = await interaction.reply({
+			content: 'Please enter the text that you would like to add.',
+			flags: [MessageFlags.Ephemeral],
 		})
-			.then((value) => {
-				if (value.response && this.displayContainer) {
+
+		interaction.channel
+			?.awaitMessages({
+				filter: (m) => m.author.id === interaction.user.id,
+				max: 1,
+				time: 60000,
+				errors: ['time'],
+			})
+			.then(async (collected) => {
+				const msg = collected.first()
+
+				if (msg && this.displayContainer) {
 					this.displayContainer.addTextDisplayComponents(
 						new TextDisplayBuilder({
-							content: value.response,
+							content: msg.content,
 						}),
 					)
 
-					this.updatePreview()
+					reply.delete().catch(() => {})
+					msg.delete().catch(() => {})
 
-					if (value.originalMessage && value.originalMessage.deletable) {
-						value.originalMessage.delete().catch(() => {})
-					}
+					this.updatePreview()
 				}
 			})
-			.catch((err) => {
-				return err
+			.catch(() => {
+				interaction.editReply({
+					content: 'You did not provide any text in time.',
+				})
 			})
+
+		// stringQuestion({
+		// 	interaction,
+		// 	question: 'Please enter the text that you would like to add.',
+		// })
+		// 	.then((value) => {
+		// 		if (value.response && this.displayContainer) {
+		// 			this.displayContainer.addTextDisplayComponents(
+		// 				new TextDisplayBuilder({
+		// 					content: value.response,
+		// 				}),
+		// 			)
+
+		// 			this.updatePreview()
+
+		//             if (value.originalMessage && value.originalMessage.deletable) {
+		//                 value.originalMessage.delete().catch(() => {});
+		//             }
+		// 		}
+		// 	})
+		// 	.catch((err) => {
+		// 		return err
+		// 	})
 	}
 
 	@ButtonComponent({ id: 'add_separator' })
